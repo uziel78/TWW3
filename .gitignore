@@ -1,6 +1,10 @@
 # Regenerable caches of CA game data (large, and the game's own text)
 *.pkl
 
+# Packs holding other modders' files stay in the masters only (see CLAUDE.md)
+Faction_Dark_Elves/!!Druchii_Malekith_MOD_faction_screen/
+Faction_Dark_Elves/!!Druchii_Malekith_MOD_faction_screen.pack
+
 # Shared build dependencies, downloaded by tools/setup.sh
 tools/pylib/
 tools/schemas/

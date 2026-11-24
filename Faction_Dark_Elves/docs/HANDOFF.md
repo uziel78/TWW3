@@ -21,6 +21,10 @@ Last updated: 2026-11-25. Rewrite this file at the end of every session; history
   excluded from decrees.
 - Repo created 2026-11-25; `twpack.py` now also finds `pylib/` and `schemas/` in `tools/`, and
   `make_loc_cache.py` rebuilds `loc_en.pkl` (verified identical to the old cache).
+- `!!Druchii_Malekith_MOD_faction_screen` (edited copy of Mixu's UI file) is kept out of this
+  public repo on the author's request: it lives only in `<MASTERS>/warhammer_3/` and the game's
+  data folder. It is still in the first commit's history (8026a4e); purging that needs a history
+  rewrite + force push, which the author hasn't asked for.
 
 ## Pending in-game tests
 - Druchii_Morathi_MOD v2: faction screen shows the two new lines; Hero upkeep about half in her
@@ -30,6 +34,7 @@ Last updated: 2026-11-25. Rewrite this file at the end of every session; history
 
 ## Open questions for the author
 - Results of the Morathi v2 test.
+- Purge the Mixu file from git history too? (rewrite + force push; not done)
 
 ## Pick up here
 Get the Morathi v2 test result and fix anything missing; then ask what's next (the planned

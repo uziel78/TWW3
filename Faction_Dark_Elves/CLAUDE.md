@@ -13,7 +13,7 @@ step: [docs/HANDOFF.md](docs/HANDOFF.md). Full dated design/test log: [docs/MOD_
 | `Druchii_Units_MOD` | Dark Elf unit abilities/attributes (all factions); Bleakswords weapon copy; Dark Riders 2 agile mount | `build_units.py` | Bleakswords confirmed; rest untested |
 | `Druchii_Naggarond_MOD` | Malekith's faction: starting army, slave tribute, faction effects, Decrees of the Witch King (Ages) | `build_naggarond_data.py`, `build_black_council.py` + Lua | Tribute and decrees confirmed; latest tweaks untested |
 | `Druchii_Malekith_MOD` | Malekith's lord effects (innate skill), Malekith's Legion, Circlet of Iron | `build_malekith.py` + `malekith_scripts/` | Untested (v4) |
-| `!!Druchii_Malekith_MOD_faction_screen` | Mixu's `campaign_select_new.twui.xml` copy that hides Malekith's "+0%" lord-effect row | hand-edited XML | Untested; re-make when Mixu updates (`malekith_ui_mixu_source.txt`) |
+| `!!Druchii_Malekith_MOD_faction_screen` | Mixu's `campaign_select_new.twui.xml` copy that hides Malekith's "+0%" lord-effect row. **`<MASTERS>` only, not in this repo** (Mixu's file) | hand-edited XML | Untested; re-make when Mixu updates (`malekith_ui_mixu_source.txt`) |
 | `Druchii_Cult-of-Pleasure_MOD` | Morathi's faction: army, buildings, Mark of Slaanesh, caps, rite, pacts, garrisons, stance | `build_cult.py` (needs `loc_en.pkl`) + Lua | Mostly confirmed; see HANDOFF for pending tests |
 | `Druchii_Morathi_MOD` | Morathi's lord effects only: hero upkeep -50% in her army, growth +20 in her province | `build_morathi.py` | Untested (v2) |
 
@@ -33,7 +33,8 @@ python -I build_cult.py ../Druchii_Cult-of-Pleasure_MOD
 python -I build_morathi.py ../Druchii_Morathi_MOD
 python -I build_pack.py ../<Mod> ../<Mod>.pack
 ```
-`!!Druchii_Malekith_MOD_faction_screen` has no builder: edit the XML and run `build_pack.py`.
+`!!Druchii_Malekith_MOD_faction_screen` has no builder and lives only in `<MASTERS>/warhammer_3/`:
+edit its XML there and run `build_pack.py` on that folder.
 Lua lives in each mod's `script/` folder (Malekith's in `_build_scripts/malekith_scripts/`).
 Units and Cult builders re-copy overridden vanilla rows from the game data: **rebuild after
 CA patches.**

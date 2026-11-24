@@ -18,7 +18,7 @@ today="$(date +%F)"
 cat > "$dir/.sync" <<EOF
 # Read by tools/sync_from_masters.sh (bash). Paths are relative to \$TWW3_MASTERS.
 MASTERS_SUBDIR="$sub"
-MOD_GLOBS="${prefix}* !!${prefix}*"
+MOD_GLOBS="${prefix}*"
 # List this faction's builders explicitly if _build_scripts is shared with another faction.
 BUILD_GLOBS="build_${prefix,,}*.py"
 EOF

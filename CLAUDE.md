@@ -14,6 +14,8 @@ check it before designing a feature, and add to it when a test teaches something
 - **Mixu's Unlocker is always loaded** (`!b_mixer.pack`). Frontend/UI work must fit around it.
 - Prefer **add-only DB rows** (new junction rows, new records) over overriding vanilla rows; when
   an override is unavoidable, override one row and re-copy it from vanilla on every build.
+- **This repo is public: no files from other modders** (e.g. edited copies of Mixu's UI files).
+  Such packs stay in `<MASTERS>` only: leave them out of `.sync` and list them in `.gitignore`.
 - Nothing is "working" until the author confirms it in game. Mark changes "untested" in the
   faction docs until then, and record confirmations with the date.
 
@@ -78,4 +80,5 @@ Tips that keep sessions cheap and safe:
   table, the player README, and a MOD_HISTORY section.
 - Windows clones: DB fragment paths are long; clone into a short folder (e.g. `D:\Programming\TWW3`)
   or set `git config core.longpaths true`.
-- Load order: a pack must out-prioritise another (e.g. Mixu's `!b_mixer`)? Prefix it `!!`.
+- Load order: a pack must out-prioritise another (e.g. Mixu's `!b_mixer`)? Prefix it `!!`. If it
+  contains another modder's file, keep it out of the repo (see the hard rules).

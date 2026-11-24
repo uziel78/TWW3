@@ -113,3 +113,7 @@ User mods Total War: Warhammer III with RPFM.
   `twpack.py` also looks for `pylib/` and `schemas/` in the repo's `tools/` (set up by
   `tools/setup.sh`) and honours `TWW3_DATA` / `TWPACK_SCHEMA`. New `make_loc_cache.py` rebuilds
   `loc_en.pkl` from `local_en.pack` (266,709 entries, identical to the previous cache).
+- `!!Druchii_Malekith_MOD_faction_screen` (folder + pack) removed from the repo on the author's
+  request: it contains an edited copy of Mixu's `campaign_select_new.twui.xml`. It stays in
+  `<MASTERS>/warhammer_3/` and in the game's data folder; `.sync` no longer mirrors `!!` packs and
+  `.gitignore` lists it. It is still in the first commit's history (8026a4e).

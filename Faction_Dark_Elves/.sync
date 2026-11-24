@@ -1,7 +1,8 @@
 # Read by tools/sync_from_masters.sh (bash). Paths are relative to $TWW3_MASTERS.
 MASTERS_SUBDIR="warhammer_3"
-# Dark Elf mods use the Druchii_ prefix; !! sorts a pack ahead of Mixu's !b_mixer.
-MOD_GLOBS="Druchii_* !!Druchii_*"
+# Dark Elf mods use the Druchii_ prefix. !!Druchii_Malekith_MOD_faction_screen is NOT mirrored:
+# it holds an edited copy of Mixu's campaign_select_new.twui.xml and stays in the masters only.
+MOD_GLOBS="Druchii_*"
 # Dark Elf entries of the masters' shared _build_scripts (add new Druchii builders here).
 # twpack.py, build_pack.py and make_loc_cache.py are the shared pack tools (mastered here).
 BUILD_GLOBS="build_bg.py build_black_council.py build_cult.py build_malekith.py build_morathi.py
