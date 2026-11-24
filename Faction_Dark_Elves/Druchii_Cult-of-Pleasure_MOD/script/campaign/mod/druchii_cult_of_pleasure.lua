@@ -1,0 +1,1761 @@
+-- Druchii_Cult-of-Pleasure_MOD (campaign): Morathi's faction, the Cult of Pleasure.
+--
+-- 1. Starting army: on the first tick of a new Immortal Empires campaign Morathi's army is
+--    reshaped (vanilla: 2 Dreadspears, 2 Witch Elves, 1 Daemonettes, 2 Shades) into
+--    2 Devotees of Slaanesh, 1 Devotees of Slaanesh (Crossbows), 1 Daemonettes of Slaanesh,
+--    1 Dark Riders (Shields) and 1 Dark Riders (Repeater Crossbows).
+-- 2. Starting hero: the Khainite Assassin she starts with is replaced by a Druchii Anointed
+--    on the same spot.
+-- 3. Starting building: the Conscription Halls at the Ancient City of Quintex is replaced by a
+--    Den of Indulgence.
+-- 4. Daemonette caps: 5 Daemonettes +1 per Den of Indulgence (tier 2+), 2 Exalted +1 per Halls
+--    of Hedonism (tier 4+); +1 Khainite Assassin per Executioner's Hall. Mark of Slaanesh bundle.
+-- 5. Unit limits (the units are uncapped in vanilla, so the game's own caps don't apply to them):
+--    Daemonettes / Exalted past the Den/Hall caps or past 6 together in one army are cancelled
+--    and refunded right after being queued, with a short message (no card locks); Bleakswords,
+--    Darkshards and Dreadspears are locked while the province caps are reached.
+-- 6. Province caps: 2 Bleakswords, 1 Darkshards, 1 Dreadspears per whole province owned.
+-- 7. The Cult's own Conscription Halls and House of Assassins chains replace any vanilla ones it
+--    owns, and any Dread
+--    Manse / Palace of Dread Knights (Black Guard, Cold Ones) it owns is dismantled.
+-- 8. Har Ganeth Executioners are locked for the Cult on every load.
+-- 9. New campaign: the Cult starts in a military alliance with N'Kari (Seducers of Slaanesh) and
+--    with the Cult of Excess as its vassal, each with +75 relations both ways (permanent bundles)
+--    and +66 Allegiance both ways (incident payloads). Extra starting heroes: a Sorceress (Lore
+--    of Dark Magic) near the White Tower of Hoeth in Saphery, a Khainite Assassin near Ghrond.
+--    Trade agreements with both, and the Cult of Excess leader (Arathar) gets +2 Bleakswords,
+--    +1 Darkshards and +2 Dark Riders (Repeater Crossbows); N'Kari gets +2 Daemonettes and
+--    +2 Devoted Marauders of Slaanesh, and +1000 gold at each of his turn starts. Ghrond's relations
+--    towards the Cult start at about 60.
+-- 10. Units from allies (outside the Cult roster) are Expendable (bundle applied on load).
+-- 11. Witch Elves and Death Hags have Pleasure Through Pain instead of Frenzy (bundle applied on load).
+-- 12. Sacrifice to Slaanesh (the Cult's rite, locked until a House of Pleasure is built): allied cap,
+--     a magic item and followers; and the Sacrifice Slaves choice when an army enters Channelling.
+-- 13. Dreadspears have Guardian (bundle applied on load).
+--
+-- Starting armies and heroes live in the campaign startpos, which can't be safely edited for
+-- Immortal Empires, so this is done by script, as Druchii_Naggarond_MOD does for Malekith.
+-- add_first_tick_callback_new only fires on a brand-new campaign, so loading a save never
+-- touches the army again.
+
+local FACTION_KEY = "wh2_main_def_cult_of_pleasure"
+local NKARI_FACTION_KEY = "wh3_main_sla_seducers_of_slaanesh"   -- N'Kari, Seducers of Slaanesh
+local MORATHI_SUBTYPE = "wh2_main_def_morathi"
+local ASSASSIN_SUBTYPE = "wh2_main_def_khainite_assassin"
+local ANOINTED_TYPE = "runesmith"                       -- the Druchii Anointed's agent type in the DB
+local ANOINTED_SUBTYPE = "wh3_dlc27_sla_druchii_anointed"
+
+-- While true, what happens is written to druchii_cult_of_pleasure_log.txt in the game folder.
+local DEBUG_LOG = true
+local LOG_FILE = "druchii_cult_of_pleasure_log.txt"
+
+local function log(msg)
+	out("Druchii_Cult-of-Pleasure_MOD: " .. msg)
+	if not DEBUG_LOG then
+		return
+	end
+	local ok, file = pcall(io.open, LOG_FILE, "a")
+	if ok and file then
+		file:write("[turn " .. tostring(cm:model():turn_number()) .. "] " .. msg .. "\n")
+		file:close()
+	end
+end
+
+---------------------------------------------------------------------------
+-- 1. Starting army
+---------------------------------------------------------------------------
+local UNITS_TO_REMOVE = {
+	"wh2_main_def_inf_dreadspears_0",
+	"wh2_main_def_inf_dreadspears_0",
+	"wh2_main_def_inf_witch_elves_0",
+	"wh2_main_def_inf_witch_elves_0",
+	"wh2_main_def_inf_shades_0",
+	"wh2_main_def_inf_shades_0",
+}
+
+-- Result (with the vanilla Daemonettes, which stay): see the header.
+-- If this changes, update the faction-screen preview list in
+-- script/frontend/mod/druchii_cult_of_pleasure_frontend.lua too.
+local UNITS_TO_ADD = {
+	"wh3_dlc27_sla_inf_devotees_of_slaanesh",
+	"wh3_dlc27_sla_inf_devotees_of_slaanesh",
+	"wh3_dlc27_sla_inf_devotees_of_slaanesh_crossbows",
+	"wh2_main_def_cav_dark_riders_1",   -- Dark Riders (Shields)
+	"wh2_main_def_cav_dark_riders_2",   -- Dark Riders (Repeater Crossbows)
+}
+
+local function find_morathi(faction)
+	local leader = faction:faction_leader()
+	if not leader:is_null_interface() and leader:character_subtype(MORATHI_SUBTYPE) then
+		return leader
+	end
+	local characters = faction:character_list()
+	for i = 0, characters:num_items() - 1 do
+		local character = characters:item_at(i)
+		if character:character_subtype(MORATHI_SUBTYPE) then
+			return character
+		end
+	end
+	return nil
+end
+
+local function reshape_army(morathi)
+	if not morathi:has_military_force() then
+		log("Morathi has no army at start, army unchanged")
+		return
+	end
+	local char_str = cm:char_lookup_str(morathi)
+	for _, unit_key in ipairs(UNITS_TO_REMOVE) do
+		cm:remove_unit_from_character(char_str, unit_key)
+	end
+	for _, unit_key in ipairs(UNITS_TO_ADD) do
+		cm:grant_unit_to_character(char_str, unit_key)
+	end
+	log("starting army updated")
+end
+
+---------------------------------------------------------------------------
+-- 9. New campaign: the pacts with N'Kari and the Cult of Excess, and the extra starting heroes
+--    (all called from the first tick)
+---------------------------------------------------------------------------
+local PACT_CULT_BUNDLE = "druchii_cult_pact_nkari"                    -- Cult: relations +75 towards the Seducers
+local PACT_NKARI_BUNDLE = "druchii_cult_pact_nkari_seducers"          -- Seducers: relations +75 towards the Cult
+local PACT_EXCESS_BUNDLE = "druchii_cult_pact_excess"                 -- Cult: relations +75 towards the Cult of Excess
+local PACT_EXCESS_VASSAL_BUNDLE = "druchii_cult_pact_excess_vassal"   -- Cult of Excess: relations +75 towards the Cult
+local EXCESS_FACTION_KEY = "wh2_main_def_cult_of_excess"              -- starts as the Cult's vassal
+local PACT_INCIDENT = "druchii_cult_incident_pact_nkari"              -- to the Cult
+local PACT_ALLY_INCIDENT = "druchii_cult_incident_pact_ally"          -- to N'Kari and to the Cult of Excess
+local PACT_ALLEGIANCE = 66
+
+-- Extra starting heroes: { region next to which it starts, agent type, subtype, name for the log }
+local STARTING_HEROES = {
+	{ "wh3_main_combi_region_white_tower_of_hoeth", "wizard", "wh2_main_def_sorceress_dark", "Sorceress (Dark) near the White Tower of Hoeth" },
+	{ "wh3_main_combi_region_ghrond", "spy", ASSASSIN_SUBTYPE, "Khainite Assassin near Ghrond" },
+}
+
+local function spawn_hero_near(region_key, agent_type, subtype, label)
+	-- A valid spot near the settlement, as CA's invasion scripts find one (in the region first).
+	local x, y = cm:find_valid_spawn_location_for_character_from_settlement(FACTION_KEY, region_key, false, true, 9)
+	if not x or x < 0 then
+		x, y = cm:find_valid_spawn_location_for_character_from_settlement(FACTION_KEY, region_key, false, false, 9)
+	end
+	if not x or x < 0 then
+		log("no valid spot found near " .. region_key .. ", no " .. label)
+		return
+	end
+	local hero = cm:create_agent(FACTION_KEY, agent_type, subtype, x, y, true)
+	if hero then
+		log(label .. " spawned at " .. x .. ", " .. y)
+	else
+		log("ERROR: " .. label .. " could not be spawned at " .. x .. ", " .. y)
+	end
+end
+
+local function spawn_starting_heroes()
+	for _, hero in ipairs(STARTING_HEROES) do
+		local ok, err = pcall(spawn_hero_near, hero[1], hero[2], hero[3], hero[4])
+		if not ok then
+			log("ERROR on first tick (" .. hero[4] .. "): " .. tostring(err))
+		end
+	end
+end
+
+-- The Cult of Excess becomes the Cult's vassal (peace first, as CA's Hellebron/Nakai scripts do
+-- with force_make_vassal), with the same relations bonus both ways as the N'Kari pact.
+-- Arathar (the Cult of Excess faction leader, a Dreadlord) starts with a stronger army.
+local EXCESS_EXTRA_UNITS = {
+	"wh2_main_def_inf_bleakswords_0",     -- Bleakswords x2
+	"wh2_main_def_inf_bleakswords_0",
+	"wh2_main_def_inf_darkshards_0",      -- Darkshards (no shields)
+	"wh2_main_def_cav_dark_riders_2",     -- Dark Riders (Repeater Crossbows) x2
+	"wh2_main_def_cav_dark_riders_2",
+}
+local ARMY_SIZE_MAX = 20
+
+-- N'Kari (the Seducers of Slaanesh faction leader) too, so he survives the early turns.
+local NKARI_EXTRA_UNITS = {
+	"wh3_main_sla_inf_daemonette_0",      -- Daemonettes of Slaanesh x2
+	"wh3_main_sla_inf_daemonette_0",
+	"wh3_main_sla_inf_marauders_0",       -- Devoted Marauders of Slaanesh x2
+	"wh3_main_sla_inf_marauders_0",
+}
+
+-- Adds units to a faction leader's army (up to the 20-unit limit).
+local function reinforce_faction_leader(faction_key, units, label)
+	local faction = cm:get_faction(faction_key)
+	if not faction or faction:is_null_interface() or faction:is_dead() or not faction:has_faction_leader() then
+		log(label .. " not found, army unchanged")
+		return
+	end
+	local leader = faction:faction_leader()
+	if leader:is_null_interface() or not leader:has_military_force() then
+		log(label .. " has no army, army unchanged")
+		return
+	end
+	local char_str = cm:char_lookup_str(leader)
+	local size = leader:military_force():unit_list():num_items()
+	local added = 0
+	for _, unit_key in ipairs(units) do
+		if size + added >= ARMY_SIZE_MAX then
+			log(label .. "'s army is full, not all units added")
+			break
+		end
+		cm:grant_unit_to_character(char_str, unit_key)
+		added = added + 1
+	end
+	log(label .. "'s army: +" .. added .. " units (was " .. size .. ")")
+end
+
+-- N'Kari's extra income: +1000 gold at the start of each of his turns (cm:treasury_mod, as CA's
+-- scripts add gold; the game has no faction-wide flat income effect).
+local NKARI_INCOME = 1000
+core:add_listener("druchii_cult_nkari_income", "FactionTurnStart",
+	function(context) return context:faction():name() == NKARI_FACTION_KEY end,
+	function()
+		local ok, err = pcall(function() cm:treasury_mod(NKARI_FACTION_KEY, NKARI_INCOME) end)
+		if not ok then
+			log("ERROR adding N'Kari's income: " .. tostring(err))
+		else
+			log("N'Kari +" .. NKARI_INCOME .. " gold")
+		end
+	end, true)
+
+local function make_excess_vassal()
+	local excess = cm:get_faction(EXCESS_FACTION_KEY)
+	if not excess or excess:is_null_interface() or excess:is_dead() then
+		log("Cult of Excess not found, no vassal")
+		return
+	end
+	cm:force_make_peace(FACTION_KEY, EXCESS_FACTION_KEY)
+	cm:force_make_vassal(FACTION_KEY, EXCESS_FACTION_KEY)
+	log("Cult of Excess made a vassal (" .. EXCESS_FACTION_KEY .. ")")
+	cm:apply_effect_bundle(PACT_EXCESS_BUNDLE, FACTION_KEY, 0)
+	cm:apply_effect_bundle(PACT_EXCESS_VASSAL_BUNDLE, EXCESS_FACTION_KEY, 0)
+	log("Cult of Excess relations bundles applied")
+end
+
+-- Ghrond's relations towards the Cult raised to about 60. A "relations +n with X" effect on faction
+-- A raises X's attitude towards A, so the bonus is on the Cult ("with Ghrond"; v1 put it on Ghrond,
+-- which raised the Cult's attitude instead and left Ghrond at -10). Ghrond's attitude is measured
+-- and the difference set on a custom copy of druchii_cult_courting_ghrond. Done once per campaign
+-- (any save; a load step), and v1's bundle is removed from Ghrond.
+local GHROND_FACTION_KEY = "wh2_main_def_ghrond"
+local GHROND_OLD_BUNDLE = "druchii_cult_ghrond_courtship"   -- v1, on Ghrond
+local CULT_GHROND_BUNDLE = "druchii_cult_courting_ghrond"   -- on the Cult
+local GHROND_TARGET = 60
+local GHROND_FALLBACK = 70   -- if the attitude can't be read (Ghrond starts at -10)
+local GHROND_DONE_KEY = "druchii_cult_ghrond_v2"
+
+local function court_ghrond()
+	if cm:get_saved_value(GHROND_DONE_KEY) then
+		return
+	end
+	local ghrond = cm:get_faction(GHROND_FACTION_KEY)
+	local cult = cm:get_faction(FACTION_KEY)
+	if not ghrond or ghrond:is_null_interface() or ghrond:is_dead() then
+		log("Ghrond not found, relations unchanged")
+		return
+	end
+	if ghrond:has_effect_bundle(GHROND_OLD_BUNDLE) then
+		cm:remove_effect_bundle(GHROND_OLD_BUNDLE, GHROND_FACTION_KEY)
+		log("Ghrond: old (wrong-way) relations bundle removed")
+	end
+	local start = nil
+	pcall(function() start = ghrond:diplomatic_attitude_towards(FACTION_KEY) end)
+	local bonus = GHROND_FALLBACK
+	if type(start) == "number" then
+		bonus = math.floor(GHROND_TARGET - start + 0.5)
+	end
+	cm:set_saved_value(GHROND_DONE_KEY, true)
+	cm:set_saved_value("druchii_cult_ghrond_start", start)
+	cm:set_saved_value("druchii_cult_ghrond_check_turns", 2)
+	if bonus <= 0 then
+		log("Ghrond already at " .. tostring(start) .. " towards the Cult, no bonus")
+		return
+	end
+	local bundle = cm:create_new_custom_effect_bundle(CULT_GHROND_BUNDLE)
+	local effects = bundle:effects()
+	for i = 0, effects:num_items() - 1 do
+		bundle:set_effect_value(effects:item_at(i), bonus)
+	end
+	bundle:set_duration(0)
+	cm:apply_custom_effect_bundle_to_faction(bundle, cult)
+	log("Ghrond towards the Cult: " .. tostring(start) .. ", Cult gets relations +" .. bonus
+		.. " with Ghrond (target " .. GHROND_TARGET .. ")")
+end
+
+-- Check at the next two Cult turn starts after it was applied (log only).
+core:add_listener("druchii_cult_ghrond_check", "FactionTurnStart",
+	function(context)
+		return context:faction():name() == FACTION_KEY and (cm:get_saved_value("druchii_cult_ghrond_check_turns") or 0) > 0
+	end,
+	function()
+		pcall(function()
+			cm:set_saved_value("druchii_cult_ghrond_check_turns", cm:get_saved_value("druchii_cult_ghrond_check_turns") - 1)
+			local ghrond = cm:get_faction(GHROND_FACTION_KEY)
+			local cult = cm:get_faction(FACTION_KEY)
+			log("Ghrond towards the Cult now " .. tostring(ghrond:diplomatic_attitude_towards(FACTION_KEY))
+				.. ", Cult towards Ghrond " .. tostring(cult:diplomatic_attitude_towards(GHROND_FACTION_KEY))
+				.. " (start " .. tostring(cm:get_saved_value("druchii_cult_ghrond_start")) .. ")")
+		end)
+	end, true)
+
+-- Trade agreements with both pact partners.
+local function make_pact_trade_agreements()
+	for _, key in ipairs({ NKARI_FACTION_KEY, EXCESS_FACTION_KEY }) do
+		local other = cm:get_faction(key)
+		if other and not other:is_null_interface() and not other:is_dead() then
+			cm:force_make_trade_agreement(FACTION_KEY, key)
+			log("trade agreement with " .. key)
+		end
+	end
+end
+
+-- Allegiance comes only through payloads (favour_points), so it's sent as incidents:
+-- the Cult gets +66 with N'Kari and +66 with the Cult of Excess (one incident), and N'Kari and
+-- the Cult of Excess each get +66 with the Cult (an incident each; AI factions see no message).
+local function send_allegiance(incident_key, receiver_key, towards_keys)
+	local receiver = cm:get_faction(receiver_key)
+	if not receiver or receiver:is_null_interface() or receiver:is_dead() then
+		return
+	end
+	local incident_builder = cm:create_incident_builder(incident_key)
+	local payload_builder = cm:create_payload()
+	local names = {}
+	for _, key in ipairs(towards_keys) do
+		local towards = cm:get_faction(key)
+		if towards and not towards:is_null_interface() and not towards:is_dead() then
+			payload_builder:favour_points(towards, PACT_ALLEGIANCE)
+			names[#names + 1] = key
+		end
+	end
+	if #names == 0 then
+		return
+	end
+	incident_builder:set_payload(payload_builder)
+	cm:launch_custom_incident_from_builder(incident_builder, receiver)
+	payload_builder:clear()
+	log("Allegiance +" .. PACT_ALLEGIANCE .. " for " .. receiver_key .. " with " .. table.concat(names, ", ")
+		.. " sent (incident " .. incident_key .. ")")
+end
+
+local function grant_pact_allegiance()
+	local steps = {
+		{ PACT_INCIDENT, FACTION_KEY, { NKARI_FACTION_KEY, EXCESS_FACTION_KEY } },
+		{ PACT_ALLY_INCIDENT, NKARI_FACTION_KEY, { FACTION_KEY } },
+		{ PACT_ALLY_INCIDENT, EXCESS_FACTION_KEY, { FACTION_KEY } },
+	}
+	for _, step in ipairs(steps) do
+		local ok, err = pcall(send_allegiance, step[1], step[2], step[3])
+		if not ok then
+			log("ERROR granting Allegiance (" .. step[2] .. "): " .. tostring(err))
+		end
+	end
+end
+
+---------------------------------------------------------------------------
+-- 12. Sacrifice to Slaanesh (the rite) and the Sacrifice Slaves choice (Channelling)
+---------------------------------------------------------------------------
+-- The rite's payload applies druchii_cult_rite_slaanesh_bundle (DB) for 6 turns: upkeep, character
+-- corruption and relations (+10 Slaanesh, +5 Elves/Chaos/Norsca) are all data. This script adds:
+--   - each rite performed: +3 permanent allied unit cap per army (custom bundle, 3 x rites), and
+--     a high-quality magic item for Morathi (or whoever leads the Cult) she doesn't have yet;
+--   - each Cult turn start while the rite lasts: every lord has a small chance to attract a
+--     pleasure-themed Dark Elf follower.
+-- Sacrifice Slaves: when one of the player's Cult armies enters the Channelling stance (and the
+-- Cult has at least 36 slaves), a dilemma offers to sacrifice 36 slaves (the dilemma's payload takes
+-- them) for +15 more Winds of Magic for that army for a turn (force bundle, removed at the next Cult
+-- turn start once that turn's Winds are in, or when the army leaves the stance).
+-- Lessons kept: cm:apply_dilemma_diplomatic_bonus from a turn-start callback crashed the game, so
+-- relations are data; nothing here reads characters during the turn-1 load.
+local RITE_KEY = "druchii_cult_ritual_slaanesh"
+local RITE_BUNDLE = "druchii_cult_rite_slaanesh_bundle"
+local RITE_ALLIED_CAP_BUNDLE = "druchii_cult_rite_slaanesh_allied_cap"
+local RITE_ALLIED_CAP_PER_RITE = 3
+local RITE_FOLLOWER_CHANCE = 10   -- % per lord per turn while the rite lasts (about one in two lords over 6 turns)
+local RITE_FOLLOWERS = {
+	"wh2_main_anc_follower_def_cultist",               -- Pleasure Cultist
+	"wh2_main_anc_follower_def_daemon_whisperer",      -- Daemon Whisperer
+	"wh2_main_anc_follower_def_diplomat_slaanesh",     -- Dark Prince's Envoy
+	"wh2_main_anc_follower_def_harem_keeper",          -- Harem Keeper
+	"wh2_main_anc_follower_def_musician_choirmaster",  -- Evil Choirmaster
+	"wh2_main_anc_follower_def_musician_drum",         -- Degenerate Kettle Drummer
+	"wh2_main_anc_follower_def_musician_flute",        -- Deviant Flautist
+}
+-- The rite's gift: legendary (200) and rare (130-150) items Dark Elves can use.
+local RITE_GIFTS = {
+	"wh3_main_anc_weapon_slaaneshs_blade",               -- Slaanesh's Blade (legendary)
+	"wh3_main_anc_enchanted_item_dreamwine",             -- Jug of Dreamwine (legendary)
+	"wh2_main_anc_armour_armour_of_eternal_servitude",   -- Armour of Eternal Servitude (rare, Dark Elf)
+	"wh2_main_anc_armour_armour_of_living_death",        -- Armour of Living Death (rare, Dark Elf)
+	"wh2_main_anc_enchanted_item_black_dragon_egg",      -- Black Dragon Egg (rare, Dark Elf)
+	"wh2_main_anc_enchanted_item_cloak_of_twilight",     -- Cloak of Twilight (rare, Dark Elf)
+	"wh2_main_anc_weapon_blade_of_ruin",                 -- Blade of Ruin (rare, Dark Elf)
+	"wh2_main_anc_weapon_chillblade",                    -- Chillblade (rare, Dark Elf)
+	"wh_main_anc_armour_tricksters_helm",                -- Trickster's Helm (rare)
+	"wh_main_anc_talisman_talisman_of_preservation",     -- Talisman of Preservation (rare)
+}
+local CHANNELLING_STANCE = "MILITARY_FORCE_ACTIVE_STANCE_TYPE_CHANNELING"
+local SACRIFICE_DILEMMA = "druchii_cult_dilemma_channelling_sacrifice"
+local SACRIFICE_BUNDLE = "druchii_cult_rite_slaanesh_channelling"   -- +15 Winds (key from v1)
+local SACRIFICE_SLAVES = 36
+local SACRIFICE_SAVED = "druchii_cult_sacrifice_armies"             -- { [cqi] = turn applied }
+local sacrifice_pending_cqi = nil
+
+local function rite_active(faction)
+	return faction and not faction:is_null_interface() and faction:has_effect_bundle(RITE_BUNDLE)
+end
+
+local function rite_step(name, fn)
+	log("rite step: " .. name)
+	local ok, result = pcall(fn)
+	if not ok then
+		log("ERROR in rite step " .. name .. ": " .. tostring(result))
+		return nil
+	end
+	return result
+end
+
+-- The permanent allied unit cap: 3 per rite performed (saved count), on a custom bundle.
+local function apply_rite_allied_cap()
+	local rites = cm:get_saved_value("druchii_cult_rites_performed") or 0
+	if rites <= 0 then
+		return
+	end
+	local faction = cm:get_faction(FACTION_KEY)
+	cm:remove_effect_bundle(RITE_ALLIED_CAP_BUNDLE, FACTION_KEY)
+	local bundle = cm:create_new_custom_effect_bundle(RITE_ALLIED_CAP_BUNDLE)
+	local effects = bundle:effects()
+	for i = 0, effects:num_items() - 1 do
+		bundle:set_effect_value(effects:item_at(i), RITE_ALLIED_CAP_PER_RITE * rites)
+	end
+	bundle:set_duration(0)
+	cm:apply_custom_effect_bundle_to_faction(bundle, faction)
+	log("rite: allied unit capacity +" .. RITE_ALLIED_CAP_PER_RITE * rites .. " (" .. rites .. " rites)")
+end
+
+-- The rite's gift: one item from RITE_GIFTS that the faction leader doesn't have yet.
+local function give_rite_gift(faction)
+	if not faction:has_faction_leader() then
+		log("rite: no faction leader, no gift")
+		return
+	end
+	local leader = faction:faction_leader()
+	local options = {}
+	for _, key in ipairs(RITE_GIFTS) do
+		if not leader:has_ancillary(key) then
+			options[#options + 1] = key
+		end
+	end
+	if #options == 0 then
+		log("rite: the faction leader has every gift already")
+		return
+	end
+	local key = options[cm:random_number(#options)]
+	cm:force_add_ancillary(leader, key, false, false)
+	log("rite: gift " .. key .. " for " .. leader:character_subtype_key())
+end
+
+-- A small chance per lord to attract one pleasure-themed follower they don't have yet.
+local function rite_followers(faction)
+	local characters = faction:character_list()
+	local gained = 0
+	for i = 0, characters:num_items() - 1 do
+		local character = characters:item_at(i)
+		if not character:is_null_interface() and character:has_military_force()
+			and not character:military_force():is_armed_citizenry()
+			and cm:random_number(100) <= RITE_FOLLOWER_CHANCE then
+			local options = {}
+			for _, key in ipairs(RITE_FOLLOWERS) do
+				if not character:has_ancillary(key) then
+					options[#options + 1] = key
+				end
+			end
+			if #options > 0 then
+				local key = options[cm:random_number(#options)]
+				cm:force_add_ancillary(character, key, false, false)
+				gained = gained + 1
+				log("rite: " .. character:character_subtype_key() .. " (cqi " .. character:command_queue_index()
+					.. ") attracted follower " .. key)
+			end
+		end
+	end
+	return gained
+end
+
+local function remove_sacrifice(cqi, reason)
+	local saved = cm:get_saved_value(SACRIFICE_SAVED) or {}
+	saved[tostring(cqi)] = nil
+	cm:set_saved_value(SACRIFICE_SAVED, saved)
+	local force = cm:model():military_force_for_command_queue_index(cqi)
+	if force and not force:is_null_interface() and force:has_effect_bundle(SACRIFICE_BUNDLE) then
+		local winds = "?"
+		pcall(function() winds = force:pooled_resource_manager():resource("wh3_main_winds_of_magic"):value() end)
+		cm:remove_effect_bundle_from_force(SACRIFICE_BUNDLE, cqi)
+		log("sacrifice: bonus removed from army " .. cqi .. " (" .. reason .. "), Winds of Magic now " .. tostring(winds))
+	end
+end
+
+-- Cult turn start: sacrifices from an earlier turn have paid out (the Winds came in with the turn).
+local function expire_sacrifices()
+	local turn = cm:model():turn_number()
+	local saved = cm:get_saved_value(SACRIFICE_SAVED) or {}
+	for cqi, applied in pairs(saved) do
+		if applied < turn then
+			remove_sacrifice(tonumber(cqi), "turn passed")
+		end
+	end
+end
+
+local function rite_turn_start()
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return
+	end
+	rite_step("sacrifices", expire_sacrifices)
+	if not rite_active(faction) then
+		return
+	end
+	if (cm:get_saved_value("druchii_cult_rites_performed") or 0) > 0 and not faction:has_effect_bundle(RITE_ALLIED_CAP_BUNDLE) then
+		rite_step("allied cap", apply_rite_allied_cap)
+	end
+	-- Followers: characters are only read from turn 2 (nothing reads characters in the turn-1 load).
+	local followers = 0
+	if cm:model():turn_number() >= 2 then
+		followers = rite_step("followers", function() return rite_followers(faction) end) or 0
+	end
+	log("rite active: " .. followers .. " followers attracted")
+end
+
+core:add_listener("druchii_cult_rite_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY end,
+	function()
+		-- A moment after the turn starts (so that turn's Winds are in), outside the turn-start event.
+		cm:callback(function()
+			local ok, err = pcall(rite_turn_start)
+			if not ok then
+				log("ERROR in the Sacrifice to Slaanesh turn update: " .. tostring(err))
+			end
+		end, 0.5)
+	end, true)
+
+-- Entering Channelling: offer the sacrifice (player only, enough slaves, not already boosted).
+-- Leaving it: the boost goes.
+core:add_listener("druchii_cult_sacrifice_stance", "ForceAdoptsStance",
+	function(context) return context:military_force():faction():name() == FACTION_KEY end,
+	function(context)
+		local ok, err = pcall(function()
+			local force = context:military_force()
+			local cqi = force:command_queue_index()
+			if force:active_stance() ~= CHANNELLING_STANCE then
+				if force:has_effect_bundle(SACRIFICE_BUNDLE) then
+					remove_sacrifice(cqi, "left the Channelling stance")
+				end
+				return
+			end
+			local faction = force:faction()
+			if not faction:is_human() or cm:get_local_faction_name(true) ~= FACTION_KEY
+				or force:is_armed_citizenry() or force:has_effect_bundle(SACRIFICE_BUNDLE) then
+				return
+			end
+			local slaves = 0
+			pcall(function() slaves = faction:pooled_resource_manager():resource("def_slaves"):value() end)
+			if slaves < SACRIFICE_SLAVES then
+				log("sacrifice: army " .. cqi .. " entered Channelling, only " .. slaves .. " slaves, no offer")
+				return
+			end
+			sacrifice_pending_cqi = cqi
+			-- A moment later, outside the stance event.
+			cm:callback(function()
+				local ok2, err2 = pcall(function() cm:trigger_dilemma(FACTION_KEY, SACRIFICE_DILEMMA) end)
+				if ok2 then
+					log("sacrifice: offered for army " .. cqi)
+				else
+					log("ERROR offering the sacrifice: " .. tostring(err2))
+				end
+			end, 0.3)
+		end)
+		if not ok then
+			log("ERROR in the Channelling stance check: " .. tostring(err))
+		end
+	end, true)
+
+core:add_listener("druchii_cult_sacrifice_choice", "DilemmaChoiceMadeEvent",
+	function(context) return context:dilemma() == SACRIFICE_DILEMMA end,
+	function(context)
+		local choice = context:choice()
+		local cqi = sacrifice_pending_cqi
+		sacrifice_pending_cqi = nil
+		if choice ~= 0 or not cqi then
+			log("sacrifice: declined")
+			return
+		end
+		-- The payload has taken the slaves; give that army the boost a moment later.
+		cm:callback(function()
+			local ok, err = pcall(function()
+				local force = cm:model():military_force_for_command_queue_index(cqi)
+				if not force or force:is_null_interface() then
+					log("sacrifice: army " .. cqi .. " is gone, no boost")
+					return
+				end
+				cm:apply_effect_bundle_to_force(SACRIFICE_BUNDLE, cqi, 0)
+				local saved = cm:get_saved_value(SACRIFICE_SAVED) or {}
+				saved[tostring(cqi)] = cm:model():turn_number()
+				cm:set_saved_value(SACRIFICE_SAVED, saved)
+				local winds = "?"
+				pcall(function() winds = force:pooled_resource_manager():resource("wh3_main_winds_of_magic"):value() end)
+				log("sacrifice: +15 Winds for army " .. cqi .. " this turn (Winds of Magic now " .. tostring(winds) .. ")")
+			end)
+			if not ok then
+				log("ERROR applying the sacrifice: " .. tostring(err))
+			end
+		end, 0.3)
+	end, true)
+
+-- The rite is locked until the Cult has a House of Pleasure (Pleasure Cult tier 3) or better, the
+-- way CA's wh2_campaign_rites.lua handles the Dark Elf rites: locked for the human player on load,
+-- unlocked (and saved as unlocked, with CA's "Rite unlocked" message) when one is completed or a
+-- settlement with one is captured. A check of the Cult's own settlements on load and at each turn
+-- start covers saves where one already stands.
+local RITE_UNLOCKED_KEY = "druchii_cult_ritual_slaanesh_unlocked"
+-- (Its own list: section 4's PLEASURE_CULT_TIER is defined further down the file.)
+local RITE_BUILDINGS = {
+	wh2_main_def_pleasure_cult_3 = true,   -- House of Pleasure
+	wh2_main_def_pleasure_cult_4 = true,   -- Halls of Hedonism
+	wh2_main_def_pleasure_cult_5 = true,
+}
+
+local function is_rite_building(name)
+	return RITE_BUILDINGS[name] == true
+end
+
+local function cult_has_rite_building(faction)
+	local regions = faction:region_list()
+	for i = 0, regions:num_items() - 1 do
+		local slots = regions:item_at(i):slot_list()
+		for j = 0, slots:num_items() - 1 do
+			local slot = slots:item_at(j)
+			if slot:has_building() and is_rite_building(slot:building():name()) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function unlock_cult_rite(show_message)
+	local faction = cm:get_faction(FACTION_KEY)
+	cm:unlock_ritual(faction, RITE_KEY)
+	if not cm:get_saved_value(RITE_UNLOCKED_KEY) then
+		cm:set_saved_value(RITE_UNLOCKED_KEY, true)
+		log("Sacrifice to Slaanesh unlocked")
+		if show_message and type(show_rite_unlocked_event) == "function" then
+			pcall(show_rite_unlocked_event, FACTION_KEY, RITE_KEY)
+		end
+	end
+end
+
+-- On load: unlocked already, or a House of Pleasure already stands -> unlocked; else locked.
+local function setup_cult_rite_lock()
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() or not faction:is_human() then
+		return
+	end
+	if cm:get_saved_value(RITE_UNLOCKED_KEY) then
+		cm:unlock_ritual(faction, RITE_KEY)
+	elseif cult_has_rite_building(faction) then
+		unlock_cult_rite(true)
+	else
+		cm:lock_ritual(faction, RITE_KEY)
+		log("Sacrifice to Slaanesh locked until a House of Pleasure is built")
+	end
+end
+
+core:add_listener("druchii_cult_rite_unlock_building", "BuildingCompleted",
+	function(context)
+		local building = context:building()
+		return not cm:get_saved_value(RITE_UNLOCKED_KEY) and building:faction():name() == FACTION_KEY
+			and is_rite_building(building:name())
+	end,
+	function()
+		local ok, err = pcall(unlock_cult_rite, true)
+		if not ok then
+			log("ERROR unlocking the rite: " .. tostring(err))
+		end
+	end, true)
+
+core:add_listener("druchii_cult_rite_unlock_capture", "GarrisonOccupiedEvent",
+	function(context)
+		if cm:get_saved_value(RITE_UNLOCKED_KEY) or context:character():faction():name() ~= FACTION_KEY then
+			return false
+		end
+		local region = context:garrison_residence():region()
+		for name in pairs(RITE_BUILDINGS) do
+			if region:building_exists(name) then
+				return true
+			end
+		end
+		return false
+	end,
+	function()
+		local ok, err = pcall(unlock_cult_rite, true)
+		if not ok then
+			log("ERROR unlocking the rite: " .. tostring(err))
+		end
+	end, true)
+
+core:add_listener("druchii_cult_rite_unlock_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY and not cm:get_saved_value(RITE_UNLOCKED_KEY) end,
+	function(context)
+		local ok, err = pcall(function()
+			if context:faction():is_human() and cult_has_rite_building(context:faction()) then
+				unlock_cult_rite(true)
+			end
+		end)
+		if not ok then
+			log("ERROR checking the rite unlock: " .. tostring(err))
+		end
+	end, true)
+
+-- Right after the rite is performed: +3 permanent allied cap and the gift at once (followers start at
+-- the next turn start).
+core:add_listener("druchii_cult_rite_performed", "RitualCompletedEvent",
+	function(context)
+		local ok, yes = pcall(function()
+			return context:performing_faction():name() == FACTION_KEY and context:ritual():ritual_key() == RITE_KEY
+		end)
+		return ok and yes
+	end,
+	function()
+		cm:callback(function()
+			local faction = cm:get_faction(FACTION_KEY)
+			if not rite_active(faction) then
+				return
+			end
+			log("Sacrifice to Slaanesh performed")
+			cm:set_saved_value("druchii_cult_rites_performed", (cm:get_saved_value("druchii_cult_rites_performed") or 0) + 1)
+			rite_step("allied cap", apply_rite_allied_cap)
+			rite_step("gift", function() give_rite_gift(faction) end)
+		end, 0.5)
+	end, true)
+
+---------------------------------------------------------------------------
+-- 2. Starting hero: Khainite Assassin -> Druchii Anointed
+---------------------------------------------------------------------------
+local function replace_assassin(faction, morathi)
+	-- The starting assassin closest to Morathi (there is normally just the one).
+	local assassin, best = nil, nil
+	local characters = faction:character_list()
+	for i = 0, characters:num_items() - 1 do
+		local character = characters:item_at(i)
+		if character:character_subtype(ASSASSIN_SUBTYPE) then
+			local dx = character:logical_position_x() - morathi:logical_position_x()
+			local dy = character:logical_position_y() - morathi:logical_position_y()
+			local distance = dx * dx + dy * dy
+			if not best or distance < best then
+				assassin, best = character, distance
+			end
+		end
+	end
+	if not assassin then
+		log("no starting Khainite Assassin found, nothing replaced")
+		return
+	end
+
+	local x, y = assassin:logical_position_x(), assassin:logical_position_y()
+	log("step: removing the starting Khainite Assassin at " .. x .. ", " .. y)
+	cm:kill_character(cm:char_lookup_str(assassin), false, true)
+	log("step: Assassin removed, finding a spot for the Druchii Anointed")
+
+	-- Spawn on the freed spot, or the nearest valid one.
+	local sx, sy = x, y
+	local ok, vx, vy = pcall(function()
+		return cm:find_valid_spawn_location_for_character_from_position(FACTION_KEY, x, y, false)
+	end)
+	if ok and type(vx) == "number" and vx >= 0 and type(vy) == "number" and vy >= 0 then
+		sx, sy = vx, vy
+	end
+	log("step: creating the Druchii Anointed at " .. sx .. ", " .. sy)
+	local anointed = cm:create_agent(FACTION_KEY, ANOINTED_TYPE, ANOINTED_SUBTYPE, sx, sy, true)
+	if anointed then
+		log("Khainite Assassin at " .. x .. ", " .. y .. " replaced by a Druchii Anointed at " .. sx .. ", " .. sy)
+	else
+		log("ERROR: the Druchii Anointed could not be spawned at " .. sx .. ", " .. sy)
+	end
+end
+
+---------------------------------------------------------------------------
+-- 3. Starting building: Conscription Halls -> Den of Indulgence at Quintex
+---------------------------------------------------------------------------
+-- Same instant swap CA uses (wh3_dlc27_nor_generic.lua): dismantle the slot, then place the
+-- new building in it. Only if the Cult of Pleasure owns Quintex at the start.
+local QUINTEX = "wh3_main_combi_region_ancient_city_of_quintex"
+local OLD_BUILDING = "wh2_main_def_barracks_1"        -- Conscription Halls
+local NEW_BUILDING = "wh2_main_def_pleasure_cult_2"   -- Den of Indulgence
+
+local function swap_quintex_building()
+	local region = cm:get_region(QUINTEX)
+	if not region or region:is_null_interface() or region:owning_faction():name() ~= FACTION_KEY then
+		log("Quintex not owned by the Cult of Pleasure at start, building unchanged")
+		return
+	end
+	local slots = region:slot_list()
+	for i = 0, slots:num_items() - 1 do
+		local slot = slots:item_at(i)
+		-- Either version of the Halls: the conversion in section 7 may already have run.
+		if slot:has_building() and (slot:building():name() == OLD_BUILDING
+				or slot:building():name() == "druchii_cult_barracks_1") then
+			cm:region_slot_instantly_dismantle_building(slot)
+			cm:region_slot_instantly_upgrade_building(slot, NEW_BUILDING)
+			local now = slot:has_building() and slot:building():name() or "nothing"
+			log("Quintex slot " .. i .. ": " .. OLD_BUILDING .. " replaced, now holds " .. now)
+			return
+		end
+	end
+	log("no " .. OLD_BUILDING .. " found at Quintex, building unchanged")
+end
+
+---------------------------------------------------------------------------
+-- 4. Daemonette caps from Dens of Indulgence
+---------------------------------------------------------------------------
+-- Base cap of 5 Daemonettes and 2 Exalted Daemonettes (set here, in DEN_BUNDLE). On top:
+-- +1 Daemonettes for every Den of Indulgence (Pleasure Cult tier 2) and +1 Exalted Daemonettes
+-- for every Halls of Hedonism (tier 4). Higher tiers keep counting (a Den upgraded to a House
+-- still counts as a Den), so upgrading never loses a bonus. Recounted at the start of every Cult
+-- turn and on load. Only region slots are read (no characters: see the crash notes below).
+local DEN_BUNDLE = "druchii_cult_den_daemonette_caps"
+local CAP_DAEMONETTES = "druchii_cult_effect_unit_cap_daemonettes"
+local CAP_EXALTED = "druchii_cult_effect_unit_cap_exalted_daemonettes"
+local PLEASURE_CULT_TIER = {
+	wh2_main_def_pleasure_cult_1 = 1,
+	wh2_main_def_pleasure_cult_2 = 2,
+	wh2_main_def_pleasure_cult_3 = 3,
+	wh2_main_def_pleasure_cult_4 = 4,
+	wh2_main_def_pleasure_cult_5 = 5,
+}
+
+local BASE_DAEMONETTES, BASE_EXALTED = 5, 2
+local ASSASSIN_CAP = "wh2_main_effect_agent_cap_increase_def_khainite_assassin"
+local EXECUTIONERS_HALL = "druchii_cult_murder_2"   -- only counted for the log
+
+-- Returns the number of Dens (tier 2+), Halls of Hedonism (tier 4+) and Executioner's Halls.
+local function count_dens(faction)
+	local dens, halls, executioners = 0, 0, 0
+	local regions = faction:region_list()
+	for i = 0, regions:num_items() - 1 do
+		local slots = regions:item_at(i):slot_list()
+		for j = 0, slots:num_items() - 1 do
+			local slot = slots:item_at(j)
+			local tier = slot:has_building() and PLEASURE_CULT_TIER[slot:building():name()]
+			if tier and tier >= 2 then
+				dens = dens + 1
+			end
+			if tier and tier >= 4 then
+				halls = halls + 1
+			end
+			if slot:has_building() and slot:building():name() == EXECUTIONERS_HALL then
+				executioners = executioners + 1
+			end
+		end
+	end
+	return dens, halls, executioners
+end
+
+local refresh_locks   -- section 5: province-cap card locks
+
+-- The caps the Dens/Halls allow (saved by update_den_caps).
+local function base_caps()
+	local saved = cm:get_saved_value("druchii_cult_den_caps_base")
+	if type(saved) == "table" and saved.d and saved.e then
+		return saved.d, saved.e
+	end
+	return BASE_DAEMONETTES, BASE_EXALTED
+end
+
+-- Writes the caps onto the custom bundle (shown in the faction effects; the limit itself is
+-- enforced by the auto-cancel in section 5); does nothing if they're already applied.
+local function apply_caps(daemonette_cap, exalted_cap)
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return false
+	end
+	local current = daemonette_cap .. "/" .. exalted_cap
+	if cm:get_saved_value("druchii_cult_den_caps_applied") == current and faction:has_effect_bundle(DEN_BUNDLE) then
+		return false
+	end
+	local values = {
+		[CAP_DAEMONETTES] = daemonette_cap,
+		[CAP_EXALTED] = exalted_cap,
+		-- The Executioner's Hall's +2 Assassins is now on the Cult's own building (DB), so 0 here.
+		[ASSASSIN_CAP] = 0,
+	}
+	cm:remove_effect_bundle(DEN_BUNDLE, FACTION_KEY)
+	local bundle = cm:create_new_custom_effect_bundle(DEN_BUNDLE)
+	local effects = bundle:effects()
+	for i = 0, effects:num_items() - 1 do
+		local effect = effects:item_at(i)
+		bundle:set_effect_value(effect, values[effect:key()] or 0)
+	end
+	bundle:set_duration(0)
+	cm:apply_custom_effect_bundle_to_faction(bundle, faction)
+	cm:set_saved_value("druchii_cult_den_caps_applied", current)
+	return true
+end
+
+local function update_den_caps()
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return
+	end
+	local dens, halls, executioners = count_dens(faction)
+	local d, e = BASE_DAEMONETTES + dens, BASE_EXALTED + halls
+	local old = cm:get_saved_value("druchii_cult_den_caps_base")
+	if not (type(old) == "table" and old.d == d and old.e == e) then
+		cm:set_saved_value("druchii_cult_den_caps_base", { d = d, e = e })
+		log("Dens of Indulgence: " .. dens .. ", Halls of Hedonism: " .. halls .. ", Executioner's Halls: " .. executioners
+			.. " -> Daemonettes cap " .. d .. ", Exalted Daemonettes cap " .. e
+			.. " (Executioner's Hall gives its +2 Assassins itself)")
+	end
+	apply_caps(d, e)
+	refresh_locks()
+end
+
+core:add_listener("druchii_cult_den_caps_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY end,
+	function() update_den_caps() end, true)
+
+-- Saves from the Sorceress version: drop its bundle (it would otherwise stay applied).
+local OLD_SORC_BUNDLE = "druchii_cult_sorceress_daemonette_caps"
+
+---------------------------------------------------------------------------
+-- 5. Unit limits: Den/Hall caps and 6 per army for Daemonettes (auto-cancel), province caps (locks)
+---------------------------------------------------------------------------
+-- These units are "never capped" in vanilla (main_units campaign_cap -1), and the game ignores
+-- unit_cap bonuses on such units, so the cap bundles only show the numbers. The limits are
+-- enforced here (human player only):
+--   Daemonettes / Exalted: never locked (v11's locks greyed out every Daemonette card, queued
+--     ones too). Instead, a moment after one is queued, if the faction now has more than the
+--     Dens / Halls allow, or the army more than 6 of the two together, the newest queued one is
+--     cancelled by clicking its queued card (the game refunds it) and a short message is shown.
+--     Only units queued past a limit are cancelled, never ones the army/faction already had when
+--     the army was selected.
+--   Bleakswords, Darkshards, Dreadspears: the card is locked (CA's event restriction) while the
+--     faction has as many as its whole provinces allow, or it rules no whole province.
+-- Counts include the recruitment queues, read from each army's UI context
+-- (PendingRecruitmentUnitList, what the army panel shows), so cancels can't drift them.
+-- AI armies aren't limited per army.
+local DAEMONETTE = "wh3_main_sla_inf_daemonette_0"
+local EXALTED = "wh3_main_sla_inf_daemonette_1"
+local DAEMONETTE_UNITS = {
+	[DAEMONETTE] = true,
+	[EXALTED] = true,
+}
+local ARMY_CAP = 6
+-- Units allowed per whole province owned.
+local PROVINCE_UNITS = {
+	wh2_main_def_inf_bleakswords_0 = 2,
+	wh2_main_def_inf_darkshards_0 = 1,
+	wh2_main_def_inf_dreadspears_0 = 1,
+}
+local COUNTED_UNITS = {}
+for key in pairs(DAEMONETTE_UNITS) do COUNTED_UNITS[key] = true end
+for key in pairs(PROVINCE_UNITS) do COUNTED_UNITS[key] = true end
+
+local TOOLTIP_NO_PROVINCE = "druchii_cult_no_whole_province"
+local TOOLTIP_LEVIES = "druchii_cult_province_cap_full"
+local TOOLTIP_NO_HALLS = "druchii_cult_requires_halls_of_ravaging"
+-- Units that need a building in the selected army's province, on top of the province caps.
+-- Dreadspears: the Dark Elf settlement building offers them too (vanilla, every tier), so without
+-- this they could be raised with only tier-1 Conscription Halls once a whole province is owned.
+local HALLS_REQUIRED = {
+	wh2_main_def_inf_dreadspears_0 = { druchii_cult_barracks_3 = true },   -- Halls of Ravaging
+}
+
+-- Does the selected army's province (the Cult's own regions in it) have one of these buildings?
+local function army_province_has(force, buildings)
+	if not force or force:is_null_interface() or not force:has_general() then
+		return false
+	end
+	local general = force:general_character()
+	if not general:has_region() then
+		return false
+	end
+	local province = general:region():province_name()
+	local regions = force:faction():region_list()
+	for i = 0, regions:num_items() - 1 do
+		local region = regions:item_at(i)
+		if region:province_name() == province then
+			local slots = region:slot_list()
+			for j = 0, slots:num_items() - 1 do
+				local slot = slots:item_at(j)
+				if slot:has_building() and buildings[slot:building():name()] then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+-- Event feed message (campaign_localised_strings in the loc file).
+local MSG_PREFIX = "campaign_localised_strings_string_"
+local MSG_TITLE = MSG_PREFIX .. "druchii_cult_cancel_title"
+local MSG_ARMY = MSG_PREFIX .. "druchii_cult_cancel_army"
+local MSG_TEMPLES = MSG_PREFIX .. "druchii_cult_cancel_temples"
+local MSG_REFUNDED = MSG_PREFIX .. "druchii_cult_cancel_refunded"
+local MSG_PICTURE = 703   -- event picture index (a vanilla scripted event's)
+
+local selected_force_cqi = nil
+local last_army = nil      -- counts of the selected army at the last check
+local lock_state = {}      -- unit key -> tooltip it's locked with, false if unlocked (nil: unknown)
+
+local queue_source_logged = nil   -- which path last worked (0 = none)
+
+local function new_counts()
+	local counts = {}
+	for key in pairs(COUNTED_UNITS) do counts[key] = 0 end
+	return counts
+end
+
+-- The army's recruitment queue read from the UI context: counted units per key, and the unit
+-- key of every queued unit in queue order (nil, nil if it can't be read).
+local function read_queue(force)
+	if not force:has_general() then
+		return {}, {}
+	end
+	local cqi = force:command_queue_index()
+	local general_cqi = force:general_character():command_queue_index()
+	-- Ways to reach the army's queue in the UI context system; the first is the one that works
+	-- (v10/v11 logs), the others are kept in case a patch changes that. The first that works is logged.
+	local paths = {
+		{ "CcoCampaignCharacter", general_cqi, "MilitaryForceContext.PendingRecruitmentUnitList" },
+		{ "CcoCampaignCharacter", tostring(general_cqi), "MilitaryForceContext.PendingRecruitmentUnitList" },
+		{ "CcoCampaignMilitaryForce", cqi, "PendingRecruitmentUnitList" },
+		{ "CcoCampaignMilitaryForce", tostring(cqi), "PendingRecruitmentUnitList" },
+	}
+	for n, path in ipairs(paths) do
+		local context_type, id, list = path[1], path[2], path[3]
+		local ok, queued, order = pcall(function()
+			local size = common.get_context_value(context_type, id, list .. ".Size")
+			if type(size) ~= "number" then
+				return nil
+			end
+			local queued, order = {}, {}
+			for i = 0, size - 1 do
+				local key = common.get_context_value(context_type, id, list .. ".At(" .. i .. ").First.UnitRecordContext.Key")
+				order[#order + 1] = key or ""
+				if COUNTED_UNITS[key] then
+					queued[key] = (queued[key] or 0) + 1
+				end
+			end
+			return queued, order
+		end)
+		if ok and type(queued) == "table" then
+			if queue_source_logged ~= n then
+				queue_source_logged = n
+				log("recruitment queue read from the army panel (path " .. n .. ")")
+			end
+			return queued, order
+		end
+	end
+	if queue_source_logged ~= 0 then
+		queue_source_logged = 0
+		log("WARNING: recruitment queue not readable from the UI, counting only recruited units")
+	end
+	return nil, nil
+end
+
+-- Counted units in the army, recruited + queued.
+local function count_in_force(force)
+	local counts = new_counts()
+	local units = force:unit_list()
+	for i = 0, units:num_items() - 1 do
+		local key = units:item_at(i):unit_key()
+		if COUNTED_UNITS[key] then
+			counts[key] = counts[key] + 1
+		end
+	end
+	for key, n in pairs((read_queue(force)) or {}) do
+		counts[key] = counts[key] + n
+	end
+	return counts
+end
+
+-- Counted units across all the Cult's armies, recruited + queued; also returns the selected
+-- army's own counts.
+local function count_in_faction(faction)
+	local totals, army = new_counts(), nil
+	local forces = faction:military_force_list()
+	for i = 0, forces:num_items() - 1 do
+		local force = forces:item_at(i)
+		if not force:is_armed_citizenry() then
+			local counts = count_in_force(force)
+			for key, n in pairs(counts) do
+				totals[key] = totals[key] + n
+			end
+			if force:command_queue_index() == selected_force_cqi then
+				army = counts
+			end
+		end
+	end
+	return totals, army
+end
+
+local function set_lock(unit_key, tooltip)
+	if lock_state[unit_key] == tooltip then
+		return
+	end
+	if lock_state[unit_key] then
+		-- Switching tooltip: drop the old restriction first.
+		cm:remove_event_restricted_unit_record_for_faction(unit_key, FACTION_KEY)
+	end
+	if tooltip then
+		cm:add_event_restricted_unit_record_for_faction(unit_key, FACTION_KEY, tooltip)
+	elseif lock_state[unit_key] == nil then
+		-- First check since load: clear any restriction an older version saved.
+		cm:remove_event_restricted_unit_record_for_faction(unit_key, FACTION_KEY)
+	end
+	lock_state[unit_key] = tooltip
+	log(unit_key .. (tooltip and (" locked (" .. tooltip .. ")") or " unlocked"))
+end
+
+local function whole_provinces()
+	return cm:get_saved_value("druchii_cult_whole_provinces") or 0
+end
+
+---------------------------------------------------------------------------
+-- 5a. Province caps: card locks
+---------------------------------------------------------------------------
+-- hint_key/hint_delta: the unit just queued (+1) or cancelled (-1). The UI queue can lag a
+-- moment behind the event, so the count is taken as at least / at most the last count +/- 1
+-- (and checked again 0.2s later), so a quick second click can't slip past the limit.
+refresh_locks = function(hint_key, hint_delta)
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return
+	end
+	local totals, army = count_in_faction(faction)
+	if hint_key and PROVINCE_UNITS[hint_key] and army and last_army then
+		local expected = last_army[hint_key] + hint_delta
+		local adjusted
+		if hint_delta > 0 then
+			adjusted = math.max(army[hint_key], expected)
+		else
+			adjusted = math.max(0, math.min(army[hint_key], expected))
+		end
+		totals[hint_key] = totals[hint_key] + adjusted - army[hint_key]
+		army[hint_key] = adjusted
+	end
+	last_army = army
+
+	-- Daemonettes are never locked (auto-cancel instead, 5b); this also clears v11's locks.
+	for key in pairs(DAEMONETTE_UNITS) do
+		set_lock(key, false)
+	end
+	local whole = whole_provinces()
+	local force = selected_force_cqi and cm:model():military_force_for_command_queue_index(selected_force_cqi)
+	for key, per_province in pairs(PROVINCE_UNITS) do
+		local tooltip = false
+		if whole == 0 then
+			tooltip = TOOLTIP_NO_PROVINCE
+		elseif HALLS_REQUIRED[key] and army and not army_province_has(force, HALLS_REQUIRED[key]) then
+			tooltip = TOOLTIP_NO_HALLS
+		elseif totals[key] >= per_province * whole then
+			tooltip = TOOLTIP_LEVIES
+		end
+		set_lock(key, tooltip)
+	end
+
+	local d_cap, e_cap = base_caps()
+	local line = "faction " .. totals[DAEMONETTE] .. "/" .. d_cap .. " Daemonettes, " .. totals[EXALTED] .. "/" .. e_cap
+		.. " Exalted"
+	if army then
+		line = "army " .. selected_force_cqi .. ": " .. (army[DAEMONETTE] + army[EXALTED]) .. "/" .. ARMY_CAP
+			.. " Daemonette units; " .. line
+	end
+	log(line .. "; levies (" .. whole .. " whole provinces) "
+		.. totals.wh2_main_def_inf_bleakswords_0 .. "/" .. 2 * whole .. " Bleakswords, "
+		.. totals.wh2_main_def_inf_darkshards_0 .. "/" .. whole .. " Darkshards, "
+		.. totals.wh2_main_def_inf_dreadspears_0 .. "/" .. whole .. " Dreadspears (incl. queued)")
+end
+
+---------------------------------------------------------------------------
+-- 5b. Daemonette caps: cancel and refund what's queued past a limit
+---------------------------------------------------------------------------
+-- The queued unit cards on the army panel, in panel order (CA's lib_campaign_ui finds them the
+-- same way: children of units_panel > main_units_panel > units named "QueuedLandUnit ...").
+local function queued_cards()
+	local cards = {}
+	local uic_units = find_uicomponent(core:get_ui_root(), "units_panel", "main_units_panel", "units")
+	if not uic_units then
+		return cards
+	end
+	for i = 0, uic_units:ChildCount() - 1 do
+		local uic_child = UIComponent(uic_units:Find(i))
+		if string.sub(uic_child:Id(), 1, 14) == "QueuedLandUnit" then
+			cards[#cards + 1] = uic_child
+		end
+	end
+	return cards
+end
+
+-- The unit key behind a queued card, if the card's UI context gives it (nil if not).
+local function card_unit_key(uic)
+	local tries = {
+		{ "CcoUnitDetails", "UnitRecordContext.Key" },
+		{ "CcoCampaignUnit", "UnitRecordContext.Key" },
+		{ "CcoMainUnitRecord", "Key" },
+	}
+	for _, try in ipairs(tries) do
+		local ok, key = pcall(function()
+			local id = uic:GetContextObjectId(try[1])
+			if id and id ~= "" then
+				return common.get_context_value(try[1], id, try[2])
+			end
+		end)
+		if ok and type(key) == "string" and key ~= "" then
+			return key
+		end
+	end
+	return nil
+end
+
+-- Clicks the newest queued card of unit_key in the selected army (the game cancels and refunds
+-- it). The card is found by the card's own unit key, or else by its position in the queue.
+local function cancel_newest_queued(force, unit_key)
+	local _, order = read_queue(force)
+	local cards = queued_cards()
+	-- 1. By the card's own unit key (newest = last).
+	for i = #cards, 1, -1 do
+		if card_unit_key(cards[i]) == unit_key then
+			log("cancelling queued " .. unit_key .. " (card " .. cards[i]:Id() .. ", matched by unit)")
+			cards[i]:SimulateLClick()
+			return true
+		end
+	end
+	-- 2. By queue position: the n-th queued unit is the n-th queued card.
+	if order and #order == #cards then
+		for i = #order, 1, -1 do
+			if order[i] == unit_key then
+				log("cancelling queued " .. unit_key .. " (card " .. cards[i]:Id() .. ", matched by queue position "
+					.. i .. " of " .. #order .. ")")
+				cards[i]:SimulateLClick()
+				return true
+			end
+		end
+	end
+	log("WARNING: couldn't find the queued " .. unit_key .. " card to cancel (" .. #cards .. " queued cards, queue "
+		.. (order and #order or "unreadable") .. ")")
+	return false
+end
+
+local function show_cancel_message(detail_key)
+	local ok, err = pcall(function()
+		cm:show_message_event(FACTION_KEY, MSG_TITLE, detail_key, MSG_REFUNDED, false, MSG_PICTURE)
+	end)
+	if not ok then
+		log("WARNING: cancel message not shown: " .. tostring(err))
+	end
+end
+
+local enforce_attempts = 0
+-- What the selected army / faction already had before you started queuing (taken when the army
+-- is selected, and lowered whenever a check finds less). Units are only cancelled down to
+-- max(limit, this), so units queued or recruited earlier are never touched (e.g. if the army got
+-- past 6 by a transfer, or the faction is over its cap after losing a Den).
+-- v12 tracked each click instead; a click the panel hadn't shown yet could be forgotten and stay
+-- queued past the limit.
+local before = nil   -- { army = n, [DAEMONETTE] = n, [EXALTED] = n }
+-- True between a cancel click and its follow-up check: checks from other clicks wait for it
+-- (they retry a moment later), so a cancel the panel hasn't shown yet isn't counted twice.
+local cancel_pending = false
+
+local function take_baseline()
+	before = nil
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() or not selected_force_cqi then
+		return
+	end
+	local totals, army = count_in_faction(faction)
+	if army then
+		before = { army = army[DAEMONETTE] + army[EXALTED], [DAEMONETTE] = totals[DAEMONETTE], [EXALTED] = totals[EXALTED] }
+	end
+end
+
+-- Checks the selected army after a Daemonette was queued; cancels one unit per pass and checks
+-- again until it's within the limits (several can be queued by fast clicking).
+local function enforce_daemonette_caps(issued_key, is_follow_up)
+	if is_follow_up then
+		cancel_pending = false
+	elseif cancel_pending then
+		cm:callback(function() enforce_daemonette_caps(issued_key) end, 0.3)
+		return
+	end
+	local faction = cm:get_faction(FACTION_KEY)
+	local force = selected_force_cqi and cm:model():military_force_for_command_queue_index(selected_force_cqi)
+	if not faction or faction:is_null_interface() or not force or force:is_null_interface()
+		or force:faction():name() ~= FACTION_KEY then
+		return
+	end
+	local totals, army = count_in_faction(faction)
+	if not army then
+		return
+	end
+	local queued = read_queue(force) or {}
+	local army_total = army[DAEMONETTE] + army[EXALTED]
+	local d_cap, e_cap = base_caps()
+	local b = before or { army = 0, [DAEMONETTE] = 0, [EXALTED] = 0 }
+	local limit = {
+		army = math.max(ARMY_CAP, b.army),
+		[DAEMONETTE] = math.max(d_cap, b[DAEMONETTE]),
+		[EXALTED] = math.max(e_cap, b[EXALTED]),
+	}
+	local function has_queued(key)
+		return key and DAEMONETTE_UNITS[key] and (queued[key] or 0) > 0
+	end
+
+	-- What to cancel: a unit over its Den/Hall cap first, else (army over 6) the one just queued.
+	local cancel_key, reason = nil, nil
+	for _, key in ipairs({ issued_key, DAEMONETTE, EXALTED }) do
+		if has_queued(key) and totals[key] > limit[key] then
+			cancel_key, reason = key, MSG_TEMPLES
+			break
+		end
+	end
+	if not cancel_key and army_total > limit.army then
+		for _, key in ipairs({ issued_key, EXALTED, DAEMONETTE }) do
+			if has_queued(key) then
+				cancel_key, reason = key, MSG_ARMY
+				break
+			end
+		end
+	end
+	log("Daemonette check, army " .. selected_force_cqi .. ": " .. army_total .. "/" .. limit.army
+		.. "; faction " .. totals[DAEMONETTE] .. "/" .. limit[DAEMONETTE] .. " Daemonettes, " .. totals[EXALTED] .. "/"
+		.. limit[EXALTED] .. " Exalted (incl. queued)" .. (cancel_key and (" -> over the limit, cancelling a " .. cancel_key) or ""))
+	if not cancel_key then
+		enforce_attempts = 0
+		-- Within the limits: if the army/faction has fewer than before (cancelled or lost units),
+		-- that's the new "before", so the old excess can't be refilled.
+		if before then
+			before.army = math.min(before.army, army_total)
+			before[DAEMONETTE] = math.min(before[DAEMONETTE], totals[DAEMONETTE])
+			before[EXALTED] = math.min(before[EXALTED], totals[EXALTED])
+		end
+		return
+	end
+	enforce_attempts = enforce_attempts + 1
+	if enforce_attempts > 8 then
+		log("WARNING: gave up cancelling after 8 tries")
+		enforce_attempts = 0
+		return
+	end
+	if cancel_newest_queued(force, cancel_key) then
+		show_cancel_message(reason)
+	end
+	-- Check again once the panel has caught up (more may have been queued, or the click failed).
+	cancel_pending = true
+	cm:callback(function() enforce_daemonette_caps(nil, true) end, 0.3)
+end
+
+---------------------------------------------------------------------------
+-- 5c. Listeners
+---------------------------------------------------------------------------
+-- The unit key of a recruit/cancel event (pcall: in case the context doesn't offer it).
+local function event_unit_key(context)
+	local ok, key = pcall(function() return context:main_unit_record() end)
+	if ok and type(key) == "string" then
+		return key
+	end
+	if ok and key and type(key) ~= "string" then
+		local ok2, k2 = pcall(function() return key:key() end)
+		if ok2 then
+			return k2
+		end
+	end
+	log("WARNING: recruitment event without a readable unit key")
+	return nil
+end
+
+local function is_local_cult(faction)
+	return faction:name() == FACTION_KEY and faction:is_human() and cm:get_local_faction_name(true) == FACTION_KEY
+end
+
+local function refresh_locks_later()
+	cm:callback(function() refresh_locks() end, 0.2)
+end
+
+core:add_listener("druchii_cult_locks_selected", "CharacterSelected",
+	function(context) return is_local_cult(context:character():faction()) end,
+	function(context)
+		local character = context:character()
+		last_army = nil
+		if character:has_military_force() and not character:military_force():is_armed_citizenry() then
+			selected_force_cqi = character:military_force():command_queue_index()
+		else
+			-- A hero or a lord without an army: nothing can be recruited, so no check. v12 checked
+			-- here too (reading every army's queue from the UI while a hero's panel opened), and
+			-- the game crashed when the Anointed's panel popped up.
+			selected_force_cqi = nil
+			before = nil
+			return
+		end
+		-- A moment later, outside the game's own selection/UI event.
+		local cqi = selected_force_cqi
+		cm:callback(function()
+			if selected_force_cqi ~= cqi then
+				return
+			end
+			local ok, err = pcall(function()
+				refresh_locks()
+				take_baseline()
+			end)
+			if not ok then
+				log("ERROR in the army-selected check: " .. tostring(err))
+			end
+		end, 0.1)
+	end, true)
+
+core:add_listener("druchii_cult_locks_settlement", "SettlementSelected",
+	function() return cm:get_local_faction_name(true) == FACTION_KEY end,
+	function()
+		-- Nothing can be recruited with a settlement selected, so no check (see above).
+		selected_force_cqi = nil
+		last_army = nil
+		before = nil
+	end, true)
+
+core:add_listener("druchii_cult_locks_issued", "RecruitmentItemIssuedByPlayer",
+	function(context) return is_local_cult(context:faction()) end,
+	function(context)
+		local key = event_unit_key(context)
+		if key and DAEMONETTE_UNITS[key] then
+			-- Wait until the queued card is on the army panel, then check the limits.
+			cm:callback(function() enforce_daemonette_caps(key) end, 0.2)
+		elseif key and PROVINCE_UNITS[key] then
+			refresh_locks(key, 1)
+			refresh_locks_later()
+		end
+	end, true)
+
+core:add_listener("druchii_cult_locks_cancelled", "RecruitmentItemCancelledByPlayer",
+	function(context) return is_local_cult(context:faction()) end,
+	function(context)
+		local key = event_unit_key(context)
+		if key and PROVINCE_UNITS[key] then
+			refresh_locks(key, -1)
+			refresh_locks_later()
+		end
+	end, true)
+
+-- Moving units between armies, disbanding or losing units changes the counts: recheck the
+-- province locks at turn start and whenever the recruitment panel opens.
+core:add_listener("druchii_cult_locks_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY end,
+	function()
+		selected_force_cqi = nil
+		last_army = nil
+		refresh_locks()
+	end, true)
+core:add_listener("druchii_cult_locks_panel", "PanelOpenedCampaign",
+	function(context)
+		return context.string == "units_recruitment" and cm:get_local_faction_name(true) == FACTION_KEY
+			and selected_force_cqi ~= nil
+	end,
+	function()
+		cm:callback(function()
+			local ok, err = pcall(refresh_locks)
+			if not ok then
+				log("ERROR in the recruitment-panel check: " .. tostring(err))
+			end
+		end, 0.1)
+	end, true)
+
+---------------------------------------------------------------------------
+-- 6. Province caps: 2 Bleakswords, 1 Darkshards, 1 Dreadspears per whole province owned
+---------------------------------------------------------------------------
+-- Values go on a custom copy of the DB bundle druchii_cult_province_unit_caps (shown in the faction
+-- effects). The limits are enforced by the locks in section 5, which read the saved whole-province
+-- count; with no whole province the three units are locked.
+local PROV_BUNDLE = "druchii_cult_province_unit_caps"
+local PROVINCE_CAPS = {
+	druchii_cult_effect_unit_cap_bleakswords = 2,
+	druchii_cult_effect_unit_cap_darkshards = 1,
+	druchii_cult_effect_unit_cap_dreadspears = 1,
+}
+
+local function count_whole_provinces(faction)
+	local total, owned = {}, {}
+	local regions = cm:model():world():region_manager():region_list()
+	for i = 0, regions:num_items() - 1 do
+		local province = regions:item_at(i):province_name()
+		total[province] = (total[province] or 0) + 1
+	end
+	local own_regions = faction:region_list()
+	for i = 0, own_regions:num_items() - 1 do
+		local province = own_regions:item_at(i):province_name()
+		owned[province] = (owned[province] or 0) + 1
+	end
+	local whole = 0
+	for province, count in pairs(owned) do
+		if count == total[province] then
+			whole = whole + 1
+		end
+	end
+	return whole
+end
+
+local function update_province_caps()
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return
+	end
+	log("step: counting whole provinces")
+	local whole = count_whole_provinces(faction)
+	log("step: " .. whole .. " whole provinces")
+	if cm:get_saved_value("druchii_cult_whole_provinces") == whole and faction:has_effect_bundle(PROV_BUNDLE) then
+		refresh_locks()
+		return
+	end
+	log("step: province caps, creating bundle")
+	cm:remove_effect_bundle(PROV_BUNDLE, FACTION_KEY)
+	local bundle = cm:create_new_custom_effect_bundle(PROV_BUNDLE)
+	local effects = bundle:effects()
+	for i = 0, effects:num_items() - 1 do
+		local effect = effects:item_at(i)
+		bundle:set_effect_value(effect, (PROVINCE_CAPS[effect:key()] or 0) * whole)
+	end
+	bundle:set_duration(0)
+	log("step: province caps, applying bundle")
+	cm:apply_custom_effect_bundle_to_faction(bundle, faction)
+	cm:set_saved_value("druchii_cult_whole_provinces", whole)
+	log("whole provinces: " .. whole .. " -> Bleakswords " .. 2 * whole .. ", Darkshards " .. whole .. ", Dreadspears " .. whole)
+	refresh_locks()
+end
+
+core:add_listener("druchii_cult_province_caps_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY end,
+	function() update_province_caps() end, true)
+core:add_listener("druchii_cult_province_caps_region", "RegionFactionChangeEvent",
+	function(context)
+		local new_owner = context:region():owning_faction()
+		local previous = context:previous_faction()
+		return (not new_owner:is_null_interface() and new_owner:name() == FACTION_KEY)
+			or (not previous:is_null_interface() and previous:name() == FACTION_KEY)
+	end,
+	function() cm:callback(update_province_caps, 0.2) end, true)
+
+---------------------------------------------------------------------------
+-- 7. Vanilla Conscription Halls -> the Cult's own Halls (same tier)
+---------------------------------------------------------------------------
+-- The vanilla chain is disabled for the Cult in the DB; any vanilla Halls it owns (at the start,
+-- or in a captured settlement) is swapped for the Cult version of the same tier.
+local function convert_barracks(region)
+	local slots = region:slot_list()
+	for i = 0, slots:num_items() - 1 do
+		local slot = slots:item_at(i)
+		if slot:has_building() then
+			local name = slot:building():name()
+			local tier = string.match(name, "^wh2_main_def_barracks_(%d)$")
+			local murder_tier = string.match(name, "^wh2_main_def_murder_(%d)$")
+			if string.match(name, "^wh2_main_def_coldones_%d$") then
+				log("step: dismantling " .. name .. " at " .. region:name())
+				cm:region_slot_instantly_dismantle_building(slot)
+				log(region:name() .. ": " .. name .. " dismantled (no Black Guard/Cold Ones for the Cult)")
+			elseif murder_tier then
+				log("step: converting House of Assassins tier " .. murder_tier .. " at " .. region:name())
+				cm:region_slot_instantly_dismantle_building(slot)
+				cm:region_slot_instantly_upgrade_building(slot, "druchii_cult_murder_" .. murder_tier)
+				log(region:name() .. ": House of Assassins tier " .. murder_tier .. " converted to the Cult version")
+			elseif tier then
+				log("step: converting Halls tier " .. tier .. " at " .. region:name())
+				cm:region_slot_instantly_dismantle_building(slot)
+				cm:region_slot_instantly_upgrade_building(slot, "druchii_cult_barracks_" .. tier)
+				log(region:name() .. ": Conscription Halls tier " .. tier .. " converted to the Cult version")
+			end
+		end
+	end
+end
+
+local function convert_all_barracks()
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return
+	end
+	local regions = faction:region_list()
+	for i = 0, regions:num_items() - 1 do
+		convert_barracks(regions:item_at(i))
+	end
+end
+
+core:add_listener("druchii_cult_barracks_captured", "RegionFactionChangeEvent",
+	function(context)
+		local owner = context:region():owning_faction()
+		return not owner:is_null_interface() and owner:name() == FACTION_KEY
+	end,
+	function(context)
+		local region_key = context:region():name()
+		cm:callback(function()
+			local region = cm:get_region(region_key)
+			if region and not region:is_null_interface() and region:owning_faction():name() == FACTION_KEY then
+				convert_barracks(region)
+			end
+		end, 0.3)
+	end, true)
+core:add_listener("druchii_cult_barracks_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY end,
+	function() convert_all_barracks() end, true)
+
+-- Every load (new or saved game): the province caps, the Halls/Dread Manse conversion (so
+-- existing saves pick them up) and the Den caps.
+-- Crash notes: reading the character list in the turn-1 load (after the starting Assassin is
+-- killed) crashed the game, so nothing here touches characters.
+local function run_step(name, fn)
+	log("load step: " .. name)
+	local ok, err = pcall(fn)
+	if not ok then
+		log("ERROR on load (" .. name .. "): " .. tostring(err))
+	end
+end
+
+cm:add_first_tick_callback(function()
+	run_step("province_caps", update_province_caps)
+	run_step("barracks", convert_all_barracks)
+	run_step("no_executioners", function()
+		-- Har Ganeth Executioners are never recruitable by the Cult (also excluded in the DB).
+		cm:add_event_restricted_unit_record_for_faction("wh2_main_def_inf_har_ganeth_executioners_0", FACTION_KEY,
+			"druchii_cult_no_executioners")
+	end)
+	run_step("mark_of_slaanesh", function()
+		-- The Mark's attributes/stats, applied to the faction (kept out of the faction bundle so the
+		-- faction-select screen shows one Mark line). Permanent; only added if missing.
+		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_mark_of_slaanesh") then
+			cm:apply_effect_bundle("druchii_cult_mark_of_slaanesh", FACTION_KEY, 0)
+			log("Mark of Slaanesh bundle applied")
+		end
+	end)
+	run_step("allied_expendable", function()
+		-- Expendable for units from allies (units outside the Cult roster; DB bundle, permanent).
+		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_allied_expendable") then
+			cm:apply_effect_bundle("druchii_cult_allied_expendable", FACTION_KEY, 0)
+			log("allied Expendable bundle applied")
+		end
+	end)
+	run_step("pleasure_through_pain", function()
+		-- Witch Elves and Death Hags: Frenzy -> Pleasure Through Pain (DB bundle, permanent).
+		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_pleasure_through_pain") then
+			cm:apply_effect_bundle("druchii_cult_pleasure_through_pain", FACTION_KEY, 0)
+			log("Pleasure Through Pain bundle applied")
+		end
+	end)
+	run_step("rite_allied_cap", function()
+		-- The allied cap from Sacrifices to Slaanesh (3 per rite), re-applied with the current effect.
+		if (cm:get_saved_value("druchii_cult_rites_performed") or 0) > 0 then
+			apply_rite_allied_cap()
+		end
+	end)
+	run_step("guardian", function()
+		-- Dreadspears: Guardian (DB bundle, permanent).
+		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_guardian") then
+			cm:apply_effect_bundle("druchii_cult_guardian", FACTION_KEY, 0)
+			log("Guardian bundle applied")
+		end
+	end)
+	run_step("sacrifice_cleanup", function()
+		-- The Sacrifice of Slaves bundle was the rite's Channelling bonus in older versions (on armies
+		-- for the whole rite): remove it from any army the sacrifice didn't put it on.
+		local saved = cm:get_saved_value("druchii_cult_sacrifice_armies") or {}
+		local forces = cm:get_faction(FACTION_KEY):military_force_list()
+		for i = 0, forces:num_items() - 1 do
+			local force = forces:item_at(i)
+			local cqi = force:command_queue_index()
+			if force:has_effect_bundle("druchii_cult_rite_slaanesh_channelling") and not saved[tostring(cqi)] then
+				cm:remove_effect_bundle_from_force("druchii_cult_rite_slaanesh_channelling", cqi)
+				log("old rite Channelling bonus removed from army " .. cqi)
+			end
+		end
+	end)
+	run_step("rite_lock", setup_cult_rite_lock)
+	run_step("ghrond_relations", court_ghrond)
+	run_step("den_caps", function()
+		if cm:get_faction(FACTION_KEY):has_effect_bundle(OLD_SORC_BUNDLE) then
+			cm:remove_effect_bundle(OLD_SORC_BUNDLE, FACTION_KEY)
+		end
+		update_den_caps()
+	end)
+end)
+
+cm:add_first_tick_callback_new(function()
+	-- Only Immortal Empires.
+	if cm:get_campaign_name() ~= "main_warhammer" then
+		return
+	end
+	local ok, err = pcall(function()
+		local faction = cm:get_faction(FACTION_KEY)
+		if not faction or faction:is_null_interface() or faction:is_dead() then
+			log("faction " .. FACTION_KEY .. " not found, nothing changed")
+			return
+		end
+		local morathi = find_morathi(faction)
+		if not morathi then
+			log("Morathi not found, nothing changed")
+			return
+		end
+		reshape_army(morathi)
+		replace_assassin(faction, morathi)
+		swap_quintex_building()
+	end)
+	if not ok then
+		log("ERROR on first tick: " .. tostring(err))
+	end
+	-- Start allied with N'Kari (Seducers of Slaanesh): peace first, then a military alliance,
+	-- the way CA's Chaos invasion episode allies factions.
+	ok, err = pcall(function()
+		local nkari = cm:get_faction(NKARI_FACTION_KEY)
+		if not nkari or nkari:is_null_interface() or nkari:is_dead() then
+			log("N'Kari's faction not found, no alliance")
+			return
+		end
+		cm:force_make_peace(FACTION_KEY, NKARI_FACTION_KEY)
+		cm:force_alliance(FACTION_KEY, NKARI_FACTION_KEY, true)
+		log("allied with N'Kari (" .. NKARI_FACTION_KEY .. ")")
+		-- Permanent relations bonus both ways (+75 each, DB bundles), so the alliance holds.
+		cm:apply_effect_bundle(PACT_CULT_BUNDLE, FACTION_KEY, 0)
+		cm:apply_effect_bundle(PACT_NKARI_BUNDLE, NKARI_FACTION_KEY, 0)
+		log("pact relations bundles applied")
+	end)
+	if not ok then
+		log("ERROR on first tick (N'Kari pact): " .. tostring(err))
+	end
+	-- The Cult of Excess starts as the Cult's vassal.
+	ok, err = pcall(make_excess_vassal)
+	if not ok then
+		log("ERROR on first tick (Cult of Excess vassal): " .. tostring(err))
+	end
+	-- Arathar's army: +2 Bleakswords, +1 Darkshards, +2 Dark Riders (Repeater Crossbows).
+	ok, err = pcall(reinforce_faction_leader, EXCESS_FACTION_KEY, EXCESS_EXTRA_UNITS, "Cult of Excess leader")
+	if not ok then
+		log("ERROR on first tick (Cult of Excess army): " .. tostring(err))
+	end
+	-- N'Kari's army: +2 Daemonettes, +2 Devoted Marauders of Slaanesh.
+	ok, err = pcall(reinforce_faction_leader, NKARI_FACTION_KEY, NKARI_EXTRA_UNITS, "N'Kari")
+	if not ok then
+		log("ERROR on first tick (N'Kari's army): " .. tostring(err))
+	end
+	-- Trade agreements with N'Kari and the Cult of Excess.
+	ok, err = pcall(make_pact_trade_agreements)
+	if not ok then
+		log("ERROR on first tick (trade agreements): " .. tostring(err))
+	end
+	-- Extra starting heroes: a Sorceress (Dark) in Saphery, a Khainite Assassin near Ghrond.
+	spawn_starting_heroes()
+	-- Starting Allegiance both ways with N'Kari and the Cult of Excess: CA grants Allegiance only
+	-- through payloads, so it comes as incidents. A moment after the first tick, once the
+	-- alliance and vassalage are in place.
+	cm:callback(function()
+		local ok2, err2 = pcall(grant_pact_allegiance)
+		if not ok2 then
+			log("ERROR granting Allegiance: " .. tostring(err2))
+		end
+	end, 1)
+end)

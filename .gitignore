@@ -1,0 +1,17 @@
+# Regenerable caches of CA game data (large, and the game's own text)
+*.pkl
+
+# Shared build dependencies, downloaded by tools/setup.sh
+tools/pylib/
+tools/schemas/
+
+# Python / OS noise
+__pycache__/
+*.pyc
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Game logs copied in for debugging
+*_log.txt
+*_log_test*.txt

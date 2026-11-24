@@ -1,0 +1,13 @@
+# Text sources: normalise line endings
+*.py   text eol=lf
+*.lua  text eol=lf
+*.md   text eol=lf
+*.sh   text eol=lf
+*.xml  text
+*.txt  text
+
+# Game binaries: never diff or convert
+*.pack binary
+*.loc  binary
+# DB table fragments have no extension (db/<table>/<fragment>)
+**/db/**/* binary

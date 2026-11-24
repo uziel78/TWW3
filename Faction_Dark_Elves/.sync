@@ -1,0 +1,6 @@
+# Read by tools/sync_from_masters.sh (bash). Paths are relative to $TWW3_MASTERS.
+MASTERS_SUBDIR="warhammer_3"
+# Dark Elf mods use the Druchii_ prefix; !! sorts a pack ahead of Mixu's !b_mixer.
+MOD_GLOBS="Druchii_* !!Druchii_*"
+# Everything in the masters' _build_scripts is Dark Elf work so far (caches excluded by the script).
+BUILD_GLOBS="*"
