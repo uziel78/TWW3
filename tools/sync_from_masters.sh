@@ -32,7 +32,8 @@ for faction in "${factions[@]}"; do
   dst="$repo/$faction"
   [ -d "$src" ] || { echo "skip $faction: $src not found"; continue; }
 
-  set -f; read -ra mod_globs <<< "$MOD_GLOBS"; read -ra build_globs <<< "$BUILD_GLOBS"; set +f
+  # split on spaces/newlines without expanding the globs yet
+  set -f; mod_globs=($MOD_GLOBS); build_globs=($BUILD_GLOBS); set +f
   for glob in "${mod_globs[@]}"; do
     for item in "$src"/$glob; do
       name="$(basename "$item")"

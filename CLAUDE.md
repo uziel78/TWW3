@@ -74,5 +74,8 @@ Tips that keep sessions cheap and safe:
   faction, give each faction explicit `BUILD_GLOBS` so files aren't mirrored twice.
 - New mod: name it `<Prefix><Subject>_MOD` (pack and source folder share the name; DB/loc
   fragments use the same name). Add a builder `build_<subject>.py` with a docstring that lists
-  every change, a row in the faction CLAUDE.md mod table, and a MOD_HISTORY section.
+  every change, add it to the faction's `.sync` `BUILD_GLOBS`, a row in the faction CLAUDE.md mod
+  table, the player README, and a MOD_HISTORY section.
+- Windows clones: DB fragment paths are long; clone into a short folder (e.g. `D:\Programming\TWW3`)
+  or set `git config core.longpaths true`.
 - Load order: a pack must out-prioritise another (e.g. Mixu's `!b_mixer`)? Prefix it `!!`.

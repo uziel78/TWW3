@@ -1,10 +1,16 @@
-# Text sources: normalise line endings
-*.py   text eol=lf
-*.lua  text eol=lf
+# Repo docs and tools: normalise to LF (bash needs LF in .sh and .sync files)
 *.md   text eol=lf
 *.sh   text eol=lf
-*.xml  text
-*.txt  text
+*.py   text eol=lf
+.sync  text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+
+# Mod sources that go into packs: keep exact bytes, so a pack built from a checkout
+# matches the one built from the masters
+*.lua -text
+*.xml -text
+*.txt -text
 
 # Game binaries: never diff or convert
 *.pack binary
