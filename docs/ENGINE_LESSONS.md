@@ -82,3 +82,103 @@ proved them; mod-specific history belongs in `Faction_<Name>/docs/MOD_HISTORY.md
 - Starting armies, characters and the faction screen's army preview are baked into
   `startpos.esf` (Mixu ships his own). Change starting armies by script on the first tick of a new
   campaign; the pre-game army preview stays vanilla.
+
+## Characters, skills, followers and special settlements (studied 2026-11-25)
+Source: a published Workshop mod that gives the Cult of Pleasure Slaanesh lords/heroes (read-only
+study of its pack; nothing copied). Patterns below are CA-style and reusable for any faction.
+
+### New lords / heroes for a faction (e.g. a Supreme Sorceress / Sorceress with Lore of Slaanesh)
+- **Make a new agent subtype** (`agent_subtypes`, key like `<vanilla>_<lore>_<mod>`) instead of
+  editing the vanilla one: `associated_unit_override` -> its own `main_units` / `land_units` rows
+  (one per mount variant: `_0` foot, `_1.._5` mounts), `is_caster`, `auto_generate` (appears in the
+  lord/hero pool), voice actor group from the vanilla subtype.
+- **Allow it per faction:** `faction_agent_permitted_subtypes` (agent type + faction + subtype).
+  Add the faction's rebel/separatist factions too.
+- **Looks:** new `campaign_character_art_sets` (unique `art_set_id`, `agent_subtype`, `is_male`) +
+  `campaign_character_arts` (uniform/animations copied from the vanilla art sets) + portrait
+  entries for the new ids in the mod's own portrait files
+  `ui/portraits/portholes/portrait_settings__<modname>.bin` and
+  `ui/portraits/units/portrait_settings__<modname>.bin` (note the **double underscore**: vanilla is
+  `portrait_settings__.bin`). Format v4: u32 version, u32 count, entries = id, head camera (5 f32 +
+  str), u8 has-body (+ 5 f32 + str), u32 variants x (filename, diffuse, mask1, mask2, mask3).
+- **Gender comes from the culture's hero row** (`agent_culture_details`: agent type + culture +
+  `gender`). Dark Elf `dignitary` is `f` (Death Hag), so a Slaanesh Cultist given to a Dark Elf
+  faction is generated female and needs **`is_male = False`** art sets, otherwise the game finds no
+  art set and shows default (dwarf-like) portraits. Vanilla Cultist art sets are `is_male = True`
+  (the Slaanesh/Chaos rows are `m`), although the model looks female.
+- **Hero group names** in the recruit panel are `agent_culture_details_onscreen_name_<key>`, one per
+  culture (DEF dignitary = 610 "Death Hag", spy = 619). They can only be renamed culture-wide (the
+  mod used neutral names: 610 "Hierophant", 619 "Martinet").
+- **Mounts:** new mount ancillaries per subtype (`ancillaries`, `ancillary_to_included_agents`,
+  `ancillaries_included_agent_subtypes`) granted by mount skills
+  (`character_skill_level_to_ancillaries_junctions`).
+- **Lore of magic = skills in the tree:** the subtype's own `character_skill_node_sets` row
+  (`agent_key`, `agent_subtype_key`) with nodes for the vanilla spell skills (e.g.
+  `wh3_main_skill_sla_magic_slaanesh_01_lash_of_slaanesh` .. `_07_phantasmagoria`, plus the
+  generic `wh_main_skill_all_magic_all_*`) in one row; those skills enable the spells.
+- **Don't override CA scripts to register subtypes.** The mod replaced the whole
+  `script/campaign/wh_campaign_experience_triggers.lua` to add its subtypes to CA's hero XP lists;
+  that is what breaks it after every game patch. Hook in with your own listeners instead.
+
+### New skill lines for existing lords / heroes (faction-only)
+- Add `character_skill_nodes` rows **to the vanilla node set** with `faction_key` = the faction
+  (only that faction sees them). `indent` = row (0 = top row; vanilla trees use 0-8, 99 = hidden
+  scaling node), `tier` = column. Faction nodes appended to an existing row used high tiers
+  (355, 356, 357) so they sort after the vanilla ones; a whole new line used a free `indent`.
+- Chain them with `character_skill_node_links` (`parent_key`/`child_key`, link positions,
+  `initial_descent_tiers`), lock alternatives with `character_skill_nodes_skill_locks` (pick one of
+  several), describe levels in `character_skill_level_details`, effects in
+  `character_skill_level_to_effects_junctions` (ability unlocks = `effect_bonus_value_unit_ability_junctions`
+  "enable" effects, scope `character_to_character_own`; army auras `character_to_force_own`).
+- One row set per faction: the mod repeats every node for the Cult, its separatists and Ssildra
+  Tor (node keys suffixed with the faction).
+
+### Followers, magic items and banners from another race
+- Who can get an ancillary is its `faction_set`. Copy the source sets (members + the faction,
+  `faction_set_items` faction rows) and point the ancillaries at the copies. CA's follower triggers
+  and post-battle item drops are global and filtered by the faction set, so they start dropping for
+  the faction. The mod also covered the shared Chaos-god sets
+  (`anc_set_multi_*_slaanesh`): items such as Banner of Hellfire, Standard of Chaos Glory, Torment
+  Blade, Etherblade.
+
+### Special settlements switching culture (Ulthuan gates, Empire forts, Ziggurat of the Dawn)
+- A special settlement's slot is a **building set** (`building_chain_set_items`), e.g.
+  `wh3_main_primary_core_special_fort_emp`, `..._fort_eagle_gate` / `_gryphon_gate` /
+  `_phoenix_gate` / `_unicorn_gate`, landmark `wh3_main_secondary_addon_landmark_ziggurat_of_dawn_beacon`.
+  The owner gets whichever chain in that set it may build; on capture the game converts it.
+- To give one faction its own version: copy the closest vanilla variant chain (e.g. the `_chaos`
+  one) as a new chain (`building_chains`, `building_levels`, upgrades/downgrades,
+  `campaign_settlement_display_building_ids` -> same model, slot unlocks, cai values), put it in the
+  same set (`building_chain_set_items`) and the culture's availability set
+  (`building_chain_availability_sets`, e.g. `wh2_main_bas_def`), then `building_culture_variants`:
+  the copy disabled for everyone and enabled for the faction, every other variant in that set
+  disabled for the faction. Effects on the copy: e.g. `wh3_main_effect_corruption_slaanesh_buildings`
+  (`region_to_region_own` or `region_to_province_own`). No script needed.
+
+### Start-up crash from renamed group keys (2026-11-25)
+- Copying units/subtypes with renamed keys: some vanilla groups are **named after the unit or
+  subtype** (`land_units.attribute_group` = the land unit key, `main_units.ui_unit_group_land` = the
+  subtype key for the Cultist, a `unit_sets` row named after a garrison unit). Renaming the
+  reference without copying the group row made the game close at the start-up logos (no dump).
+  Copy `unit_attributes_groups` + `unit_attributes_to_groups_junctions` and `ui_unit_groupings` too.
+- `tools/refcheck.py <mod folder> [other packs]` checks every schema reference column of a mod's
+  tables against vanilla + the given packs + the mod. Misses that point at engine enum tables (not in
+  db.pack: campaign_anim_set_enums, audio_vo*, unit_training_level_enum, ...) are normal.
+- **Never add rows to `main_unit_ownership_content_pack_junctions` (or
+  `agent_subtype_ownership_content_pack_junctions`).** Copying a vanilla unit's DLC-ownership row
+  for a new unit made the game close a few seconds after Play (no dump, no log), even for a single
+  Sorceress copy; found by a cumulative table-by-table ladder of test packs (2026-11-25). Modded units
+  and subtypes without ownership rows are always available.
+- Bisecting a start-up crash: build cumulative test packs (each step self-contained, checked with
+  `tools/refcheck.py`), enable exactly one per start, and confirm the active list in
+  `%APPDATA%\The Creative Assembly\Warhammer3\logs\modified.log` ("Mod:" lines) after every run.
+- **Overriding vanilla loc keys:** put them in a loc file whose name sorts before vanilla's
+  (`text/db/<table>__.loc`), e.g. `text/db/!!<mod>_overrides.loc`. The first file defining a key
+  wins; an override in `text/db/Druchii_<mod>.loc` (sorts after `agent_culture_details__.loc`) had no
+  effect in game (2026-11-26). New keys can live in any loc file.
+- **Lore tabs in the lord recruitment list** come from **`agent_subtypes.magic_lore`** (lords only;
+  heroes leave it empty), e.g. `wh2_main_lore_dark_magic`, `wh_main_lore_fire`,
+  `wh3_main_lore_slaanesh`. Changing `main_units.ui_unit_group_land` (v6) or the unit's spell group
+  `special_ability_groups_to_units_junctions.ability_group` (v8) did not move a copied lord out of the
+  Dark Magic tab (2026-11-26). Set all three for a lore copy: magic_lore for the tab, the spell group
+  for the battle spell bar, the UI group for unit grouping.

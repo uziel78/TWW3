@@ -94,7 +94,12 @@ for building in ['wh2_main_def_pleasure_cult_2', 'wh2_main_def_pleasure_cult_3']
 SEEKERS = 'wh3_main_sla_cav_seekers_of_slaanesh_0'
 SPAWN = 'wh3_main_sla_mon_spawn_of_slaanesh_0'
 FURIES, PREYTON = 'wh3_main_sla_inf_chaos_furies_0', 'wh3_dlc27_sla_mon_preyton'   # Beastmasters, section 25b
-ROSTER_ADDITIONS = [SEEKERS, SPAWN, FURIES, PREYTON, 'wh3_main_sla_cha_cultist_0']
+COLD_ONE_KNIGHTS = 'wh2_main_def_cav_cold_one_knights_0'                                  # Dread Manse, section 25c
+CHAOS_WARRIORS_SLA = 'wh3_dlc20_chs_inf_chaos_warriors_msla'    # hand weapon & shield
+PLEASURESEEKERS = 'wh3_dlc27_sla_cav_pleasureseekers'
+CHAOS_KNIGHTS_SLA = 'wh3_dlc20_chs_cav_chaos_knights_msla'
+ROSTER_ADDITIONS = [SEEKERS, SPAWN, FURIES, PREYTON, 'wh3_main_sla_cha_cultist_0',
+                    CHAOS_WARRIORS_SLA, PLEASURESEEKERS, CHAOS_KNIGHTS_SLA]
 for unit, buildings in [(SEEKERS, ['wh2_main_def_pleasure_cult_3', 'wh2_main_def_pleasure_cult_4', 'wh2_main_def_pleasure_cult_5']),
                         (SPAWN, ['wh2_main_def_sorcery_1', 'wh2_main_def_sorcery_2'])]:
     for building in buildings:
@@ -154,6 +159,11 @@ loc['campaign_localised_strings_string_druchii_cult_cancel_army'] = (
 loc['campaign_localised_strings_string_druchii_cult_cancel_temples'] = (
     "The Cult's temples can bind no more of these daemons. Build or upgrade Pleasure Cult temples to summon more.")
 loc['campaign_localised_strings_string_druchii_cult_cancel_refunded'] = 'The unit was removed from the queue and refunded.'
+# v21: levies (Bleakswords, Darkshards, Dreadspears) are cancelled and refunded too, like Daemonettes.
+loc['campaign_localised_strings_string_druchii_cult_cancel_levies'] = (
+    "The Cult's settlements have given all the levies of this regiment they can.")
+loc['campaign_localised_strings_string_druchii_cult_cancel_halls'] = (
+    'Dreadspears are only raised in provinces with Halls of Ravaging.')
 
 # (v11, no longer used by the script: kept so older saves' tooltips still resolve.)
 # Tooltip when the faction has as many as its Dens / Halls allow (script lock).
@@ -336,15 +346,18 @@ for r in table(db, 'building_effects_junction_tables'):
         add('building_effects_junction_tables', **dict(r, building=lvl(CULT_CHAIN, 3)))
 
 # --------------------------------------------------------------------------
-# 6. Province caps: 2 Bleakswords, 1 Darkshards and 1 Dreadspears per whole province the Cult
-#    owns. Values set by the campaign script on a custom copy of this bundle.
+# 6. Levy caps (v17, user 2026-11-25; was 2/1/1 per whole province): 1 Bleaksword per settlement,
+#    1 Darkshards per tier 2+ settlement, 1 Dreadspears per tier 3+ settlement (settlement tier =
+#    level of the main settlement building). Values set by the campaign script on a custom copy of
+#    this bundle; the limits themselves are the script's recruitment locks (section 5).
 # --------------------------------------------------------------------------
 PROV_BUNDLE = 'druchii_cult_province_unit_caps'
 add('effect_bundles_tables', **dict(template_bundle, key=PROV_BUNDLE, localised_title='Cult Levies',
                                      localised_description='', ui_icon='slaanesh_points.png'))
 loc[f'effect_bundles_localised_title_{PROV_BUNDLE}'] = 'Cult Levies'
 loc[f'effect_bundles_localised_description_{PROV_BUNDLE}'] = (
-    'The Cult keeps only a few drilled regiments, raised from the provinces it rules outright.')
+    'The Cult keeps only a few drilled regiments, raised from its settlements; greater settlements '
+    'muster finer troops.')
 for unit, name in [(BLEAKSWORDS, 'Bleakswords'), (DARKSHARDS, 'Darkshards'), (DREADSPEARS, 'Dreadspears')]:
     effect = f'druchii_cult_effect_unit_cap_{name.lower()}'
     add('effects_tables', effect=effect, icon='unit_capacity.png', priority=1, icon_negative='unit_capacity.png',
@@ -358,14 +371,14 @@ for unit, name in [(BLEAKSWORDS, 'Bleakswords'), (DARKSHARDS, 'Darkshards'), (DR
 loc['campaign_localised_strings_string_druchii_cult_requires_halls_of_ravaging'] = (
     '[[col:red]]Dreadspears are only raised in provinces with Halls of Ravaging.[[/col]]')
 loc['campaign_localised_strings_string_druchii_cult_province_cap_full'] = (
-    '[[col:red]]The Cult\'s provinces have given all the levies of this regiment they can. '
-    'Rule more whole provinces to raise more.[[/col]]')
+    '[[col:red]]The Cult\'s settlements have given all the levies of this regiment they can. '
+    'Take or grow more settlements to raise more.[[/col]]')
 loc['campaign_localised_strings_string_druchii_cult_no_whole_province'] = (
-    '[[col:red]]The Cult must rule a whole province to raise this regiment.[[/col]]')
+    '[[col:red]]The Cult needs a greater settlement to raise this regiment.[[/col]]')
 
 # --------------------------------------------------------------------------
 # 7. (Removed 2026-11-25: v1-v13 disabled the Dread Manse / Palace of Dread Knights for the Cult;
-#    the user wants the vanilla chain back. The script no longer dismantles them either.)
+#    the vanilla chain came back in v14; since v16 the Cult has its own copy, section 25c.)
 # --------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
@@ -715,6 +728,8 @@ for r in table(db, 'faction_agent_permitted_subtypes_tables'):
 # tiers 2-5, rank +2 at tier 3 and +4 at tiers 4-5. The Cultist also needs CA's per-province
 # "enable recruitment" effect (as on the Slaanesh Devotee buildings). Same effects and scopes as
 # CA's rows. The Cultist's own unit goes into the Cult roster (section 2b) like the Druchii Anointed.
+# Druchii_Cult-Characters_MOD replaces this vanilla Cultist with the Cult's own (female art sets,
+# own skill tree) and disables this permission; the Den effects below then apply to that one.
 CULTIST = 'wh3_main_sla_cultist'
 for r in table(db, 'faction_agent_permitted_subtypes_tables'):
     if r['faction'] == FACTION and r['subtype'] == 'wh2_main_def_death_hag':
@@ -742,20 +757,21 @@ for tier in (2, 3, 4, 5):
 # a number of turns (ritual_payload_effect_bundles). In it: unit-set stat effects (the same bonus
 # values CA uses, scope faction_to_force_own). The parts data can't do are scripted (Lua section
 # 12) while the bundle is active: extra Winds only for armies in the Channelling stance (a force
-# bundle), a chance of pleasure-themed followers for lords, and the permanent allied unit cap
-# (+3 per rite). Those are shown as one text-only line. Relations are data (below).
+# bundle) and a chance of pleasure-themed followers for lords, shown as one text-only line.
+# Relations are data (below). (The +3 allied units per rite was removed in v19, user 2026-11-25:
+# the Cult has a flat 6 allied units per army instead, ALLIED_HOST_BUNDLE.)
 RITE_BUNDLE = 'druchii_cult_rite_slaanesh_bundle'
 RITE_TURNS = 6
 RITE_CHANNEL_BUNDLE = 'druchii_cult_rite_slaanesh_channelling'   # force bundle, script
-RITE_ALLIED_CAP_BUNDLE = 'druchii_cult_rite_slaanesh_allied_cap'  # permanent, script
+RITE_ALLIED_CAP_BUNDLE = 'druchii_cult_rite_slaanesh_allied_cap'  # legacy (v5-v18): script removes it from saves
 RITE_UPKEEP_SET = 'druchii_cult_rite_upkeep_units'
-RITE_UPKEEP_UNITS = ['wh2_main_def_inf_witch_elves_0', 'wh3_dlc27_sla_inf_devotees_of_slaanesh',
-                     'wh3_dlc27_sla_inf_devotees_of_slaanesh_crossbows', 'wh3_main_sla_inf_daemonette_0',
-                     'wh3_main_sla_inf_daemonette_1',
-                     # Seekers, Spawn, Furies and Preytons were covered as allied units until they joined
-                     # the Cult roster (section 2b, 2026-11-25); listed here so they keep the rite's upkeep cut.
-                     SEEKERS, SPAWN, FURIES, PREYTON]
-unit_set(RITE_UPKEEP_SET, sorted(set(RITE_UPKEEP_UNITS) | set(allied_units)))
+# v19 (user 2026-11-25): only Devotees of Slaanesh (both) and every Daemonic unit (attribute
+# "daemonic", non-characters, any faction's version: allied Daemons count too).
+DAEMONIC_UNITS = [u for u, m in main_units.items() if m['caste'] not in ('lord', 'hero')
+                  and 'daemonic' in groups.get(land_units[m['land_unit']]['attribute_group'], set())]
+RITE_UPKEEP_UNITS = ['wh3_dlc27_sla_inf_devotees_of_slaanesh', 'wh3_dlc27_sla_inf_devotees_of_slaanesh_crossbows']
+unit_set(RITE_UPKEEP_SET, sorted(set(RITE_UPKEEP_UNITS) | set(DAEMONIC_UNITS)))
+print('Rite upkeep set:', len(RITE_UPKEEP_UNITS), 'Devotees +', len(DAEMONIC_UNITS), 'Daemonic units')
 
 add('effect_bundles_tables', **dict(template_bundle, key=RITE_BUNDLE, localised_title='Sacrifice to Slaanesh',
                                     localised_description='', ui_icon='slaanesh_points.png'))
@@ -776,7 +792,7 @@ def rite_effect(key, text, icon, unit_set_key=None, bonus=None, value=1.0, categ
         advancement_stage='start_turn_completed')
 
 
-rite_effect('druchii_cult_rite_upkeep', 'Upkeep: %+n% for Witch Elves, Devotees, Daemonettes and allied units',
+rite_effect('druchii_cult_rite_upkeep', 'Upkeep: %+n% for Devotees of Slaanesh and Daemonic units',
             'military_spending.png', RITE_UPKEEP_SET, 'upkeep_mod', -50, 'campaign')
 # Slaanesh corruption: +10 in the Cult's provinces, +5 in provinces adjacent to them (corruption is
 # per province). The adjacent part is CA's "Slaanesh corruption in adjacent provinces" effect, which
@@ -819,15 +835,25 @@ add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=RITE_CHANNEL
     effect_key='wh3_main_effect_winds_of_magic_channelling_stance', effect_scope='force_to_force_own', value=15.0,
     advancement_stage='start_turn_completed')
 
-# Permanent allied unit cap per army ("Allied unit cap in armies", bonus allied_recruitment_unit_cap_mod;
-# v1 used wh3_main_effect_recruitment_cap_allied_units, a recruitment-source limit that didn't change
-# the army's allied cap): +3 per rite performed (the script sets 3 x rites on a custom copy).
+# Legacy (v5-v18) allied cap bundle, +3 per rite performed; no longer applied, kept in the DB only so
+# the script can remove it from older saves ("Allied unit cap in armies", allied_recruitment_unit_cap_mod).
 add('effect_bundles_tables', **dict(template_bundle, key=RITE_ALLIED_CAP_BUNDLE, localised_title="The Dark Prince's Host",
                                     localised_description='', ui_icon='slaanesh_points.png'))
 loc[f'effect_bundles_localised_title_{RITE_ALLIED_CAP_BUNDLE}'] = "The Dark Prince's Host"
 loc[f'effect_bundles_localised_description_{RITE_ALLIED_CAP_BUNDLE}'] = 'Granted by the Sacrifice to Slaanesh.'
 add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=RITE_ALLIED_CAP_BUNDLE,
     effect_key='wh3_main_effect_allied_recruitment_unit_cap', effect_scope='faction_to_faction_own', value=3.0,
+    advancement_stage='start_turn_completed')
+# Base allied units per army 4 -> 6 for the Cult (user 2026-11-25): +2 with the same effect, a DB bundle
+# the script applies on every load (not in the starting bundle, so the faction screen stays as it is).
+ALLIED_HOST_BUNDLE = 'druchii_cult_allied_host'
+add('effect_bundles_tables', **dict(template_bundle, key=ALLIED_HOST_BUNDLE, localised_title='Sworn Allies',
+                                    localised_description='', ui_icon='slaanesh_points.png'))
+loc[f'effect_bundles_localised_title_{ALLIED_HOST_BUNDLE}'] = 'Sworn Allies'
+loc[f'effect_bundles_localised_description_{ALLIED_HOST_BUNDLE}'] = (
+    "The Cult's allies march gladly beside its armies.")
+add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=ALLIED_HOST_BUNDLE,
+    effect_key='wh3_main_effect_allied_recruitment_unit_cap', effect_scope='faction_to_faction_own', value=2.0,
     advancement_stage='start_turn_completed')
 
 # --------------------------------------------------------------------------
@@ -1073,8 +1099,15 @@ for gr in table(db, 'campaign_group_rituals_tables'):
 #   25b Beastmasters (wh2_main_def_beasts, user 2026-11-25): Harpies -> Chaos Furies (Slaanesh) at
 #       every level, Black Dragon -> Preyton (Slaanesh) at the top level; tier 1 "Furies' Roost"
 #       (was Harpy Roost), tier 3 "Preyton's Pen" (was Dragon Hatchery), with new short texts.
+#   25c Dread Manse (wh2_main_def_coldones, user 2026-11-25): Control +3/+5 -> Slaanesh corruption
+#       +3/+5; tier 4 Dread Manse recruits Cold One Knights + Chaos Warriors of Slaanesh (hand
+#       weapon & shield), tier 5 "Palace of Pleasure" (was Palace of Dread Knights) adds
+#       Pleasureseekers + Chaos Knights of Slaanesh. Chariots, Dread Knights, Black Guard dropped.
+#   units = {level: [unit, ...]} replaces a level's whole vanilla unit list;
+#   effect_swap = {vanilla effect: (new effect, new scope)} keeps the value.
 # --------------------------------------------------------------------------
-def cult_chain_copy(vanilla, cult, garrison_swap=None, unit_swap=None, names=None, short_texts=None):
+def cult_chain_copy(vanilla, cult, garrison_swap=None, unit_swap=None, names=None, short_texts=None,
+                    units=None, effect_swap=None):
     rc = lambda v: v.replace(vanilla, cult, 1) if isinstance(v, str) and v.startswith(vanilla + '_') else v
     for r in table(db, 'building_chains_tables'):
         if r['key'] == vanilla:
@@ -1101,9 +1134,21 @@ def cult_chain_copy(vanilla, cult, garrison_swap=None, unit_swap=None, names=Non
                         ('building_levels_campaign_bmd_layer_group_junctions_tables', 'building_level')]:
         for r in table(db, t_name):
             if r[col].startswith(vanilla + '_'):
-                add(t_name, **dict(r, **{col: rc(r[col])}))
+                row = dict(r, **{col: rc(r[col])})
+                if t_name == 'building_effects_junction_tables' and r['effect'] in (effect_swap or {}):
+                    row['effect'], row['effect_scope'] = effect_swap[r['effect']]
+                add(t_name, **row)
     seen = set()
+    if units:
+        template = next(r for r in table(db, 'building_units_allowed_tables')
+                        if r['building'].startswith(vanilla + '_') and not r['faction'])
+        for building, unit_list in units.items():
+            for unit in unit_list:
+                add('building_units_allowed_tables', **dict(template, building=building, unit=unit,
+                                                             key=new_key(building + unit, taken)))
     for r in table(db, 'building_units_allowed_tables'):
+        if units:
+            break
         if r['building'].startswith(vanilla + '_') and not r['faction']:
             building, unit = rc(r['building']), (unit_swap or {}).get(r['unit'], r['unit'])
             if (building, unit) not in seen:      # CA lists a few units twice on one level
@@ -1160,6 +1205,14 @@ cult_chain_copy('wh2_main_def_beasts', 'druchii_cult_beasts',
                 short_texts={
                     'druchii_cult_beasts_1': "Daemonic Furies of the Dark Prince gather to roost above the Cult's temples.",
                     'druchii_cult_beasts_3': "The Cult's Beastmasters break the monstrous Preytons to Slaanesh's will."})
+SLAANESH_CORRUPTION = ('wh3_main_effect_corruption_slaanesh_buildings', 'region_to_region_own')
+cult_chain_copy('wh2_main_def_coldones', 'druchii_cult_coldones',
+                effect_swap={'wh_main_effect_public_order_base': SLAANESH_CORRUPTION},
+                units={'druchii_cult_coldones_1': [COLD_ONE_KNIGHTS, CHAOS_WARRIORS_SLA],
+                       'druchii_cult_coldones_2': [COLD_ONE_KNIGHTS, CHAOS_WARRIORS_SLA, PLEASURESEEKERS, CHAOS_KNIGHTS_SLA]},
+                names={'druchii_cult_coldones_2': 'Palace of Pleasure'},
+                short_texts={
+                    'druchii_cult_coldones_2': "Cold-blooded knights and Chaos-sworn champions revel in the Dark Prince's palace."})
 
 # --------------------------------------------------------------------------
 # 26. Slaanesh followers and items for the Cult (user, 2026-11-25)
@@ -1208,6 +1261,50 @@ for r in table(db, 'ancillaries_tables'):
     add('ancillaries_tables', **dict(r, faction_set=cult_sets[old_set]))
 assert len(out_tables['ancillaries_tables']) == len(CULT_SLAANESH_ANCILLARIES), 'an ancillary key is missing'
 print('Slaanesh ancillaries for the Cult:', len(CULT_SLAANESH_ANCILLARIES), 'via sets', sorted(cult_sets))
+
+# --------------------------------------------------------------------------
+# 27. Regiments of Renown (user 2026-11-25, list cult_ror_list.md)
+# --------------------------------------------------------------------------
+# RoR are hired from mercenary pools (the Dark Elf pool wh2_main_def_units_of_renown_pool is offered
+# by subculture) and every RoR has units_to_exclusive_faction_permissions rows (key + faction):
+# only the listed factions may hire it. Removed for the Cult: its own allowed=True row overridden
+# to allowed=False. Added: a Cult row in the Dark Elf pool (faction_requirement), an allowed row and
+# the Cult's military group. Lord level requirements stay vanilla.
+CULT_ROR_REMOVED = [
+    'wh2_dlc10_def_inf_the_hellebronai_ror_0',            # The Hellebronai (Dreadspears)
+    'wh2_dlc10_def_inf_sisters_of_the_singing_doom_ror_0',  # Sisters of the Singing Doom (Witch Elves)
+    'wh2_dlc10_def_inf_the_bolt_fiends_ror_0',            # The Bolt-fiends (Darkshards, Shields)
+    'wh2_dlc14_def_inf_harpies_ror_0',                    # The Crows of Khaine (Harpies)
+    'wh2_dlc10_def_cav_knights_of_the_ebon_claw_ror_0',   # Knights of the Ebon Claw (Dread Knights)
+    'wh2_dlc10_def_inf_blades_of_the_blood_queen_ror_0',  # Blades of the Blood Queen (Executioners)
+]
+CULT_ROR_ADDED = [
+    'wh3_dlc27_sla_mon_preyton_ror',        # Scourge of Arden (Preyton)
+    'wh3_twa06_sla_inf_daemonette_ror_0',   # Bringers of Beguilement (Exalted Daemonettes)
+]
+CULT_ROR_POOL = 'wh2_main_def_units_of_renown_pool'
+exclusive = table(db, 'units_to_exclusive_faction_permissions_tables')
+for u in CULT_ROR_REMOVED:
+    assert any(r['key'] == u and r['faction'] == FACTION for r in exclusive), u
+    add('units_to_exclusive_faction_permissions_tables', key=u, faction=FACTION, allowed=False)
+pool_rows = table(db, 'mercenary_pool_to_groups_junctions_tables')
+taken_pool_keys = {r['key'] for r in pool_rows}
+groups_by_unit = {r['unit_record']: r['key'] for r in table(db, 'mercenary_unit_groups_tables')}
+for u in CULT_ROR_ADDED:
+    template = next(r for r in pool_rows if r['group'] == groups_by_unit[u])
+    add('mercenary_pool_to_groups_junctions_tables', **dict(
+        template, pool=CULT_ROR_POOL, faction_requirement=FACTION, subculture_requirement='', tech_requirement='',
+        key=new_key(f'druchii_cult_ror_{u}', taken_pool_keys)))
+    add('units_to_exclusive_faction_permissions_tables', key=u, faction=FACTION, allowed=True)
+    add('units_to_groupings_military_permissions_tables', military_group='wh3_main_def_morathi', unit=u)
+print('Regiments of Renown: removed', len(CULT_ROR_REMOVED), 'added', len(CULT_ROR_ADDED))
+
+# --------------------------------------------------------------------------
+# 28. (Removed 2026-11-25.) v21 tried female Cultist art sets here (portrait file named with one
+#     underscore, so likely never loaded). The Cult's Cultist is now its own subtype in
+#     Druchii_Cult-Characters_MOD (build_cult_characters.py), which also disables the vanilla
+#     Cultist permitted below (section 17) for the Cult; without that pack it stays as a fallback.
+# --------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
 # Write

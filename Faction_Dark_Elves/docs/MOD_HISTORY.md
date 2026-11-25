@@ -156,3 +156,41 @@ User mods Total War: Warhammer III with RPFM.
   `kill_character`. Fix v15b: turn check first (turn < 2 or turn % 5 ~= 0 -> false), character
   reads inside pcall. Confirmed by the author: loads past turn 1. LESSON: any Character* listener
   must bail out on turn 1 before touching `context:character()`.
+- Cult v16 (2026-11-25): section 25c Cult-only copy `druchii_cult_coldones_1-2` of the Dread Manse
+  chain (`cult_chain_copy()` gained `units={level: [...]}` and `effect_swap`). Control +3/+5 ->
+  `wh3_main_effect_corruption_slaanesh_buildings` (region_to_region_own) +3/+5. Tier 4 Dread Manse:
+  Cold One Knights + Chaos Warriors of Slaanesh (hand weapon & shield); tier 5 "Palace of Pleasure":
+  same + Pleasureseekers + Chaos Knights of Slaanesh. Chariots, Dread Knights, Black Guard dropped for
+  the Cult. Lua converts vanilla Dread Manses.
+- Cult v17: levy caps replace the whole-province rule: 1 Bleaksword per settlement, 1 Darkshards per
+  tier 2+, 1 Dreadspears per tier 3+ (tier = trailing digit of the main settlement building).
+  Recounted on load, Cult turn start, settlement change and settlement upgrade (BuildingCompleted,
+  turn >= 2). Dreadspears still need Halls of Ravaging in the army's province.
+- Cult v18-v19: flat 6 allied units per army (bundle `druchii_cult_allied_host`, +2); the rite's +3
+  per rite removed (old bundle removed from saves). Rite upkeep -50% now only Devotees of Slaanesh
+  (both) and every non-character unit with the `daemonic` attribute.
+- Cult v20: Regiments of Renown (section 27): removed for the Cult via
+  `units_to_exclusive_faction_permissions` override (allowed=False): Hellebronai, Singing Doom,
+  Bolt-fiends, Crows of Khaine, Ebon Claw, Blades of the Blood Queen. Added: Scourge of Arden
+  (Preyton) and Bringers of Beguilement (Exalted Daemonettes) via a Cult row in the Dark Elf RoR pool.
+  RoR stay out of all mod caps.
+- Cult v21-v22: levies auto-cancel and refund like Daemonettes (no card locks); the Dreadspears card
+  is hidden where they can't be raised (the vanilla settlement building offers them). BLACK SCREEN
+  (tests 30-32): the turn-1 intro went black after the "events" panel; cause = the hero-label
+  listeners of Lua section 15 (PanelOpened/PanelClosed/ComponentLClickUp rewriting "Death Hag");
+  switched off (`RELABEL_ENABLED = false`), confirmed by test 33. The v21 portrait attempt (section
+  28, portrait file with one underscore) removed; the Cultist moved to the characters pack.
+- NEW Druchii_Cult-Characters_MOD (2026-11-25/26, builder `build_cult_characters.py`): Cult-only
+  copies of vanilla characters via `copy_character()` (every row naming the character's keys, keys
+  renamed only in key/reference columns, defining tables only by their own key, Cult permissions,
+  Cult military group, portrait entries in `portrait_settings__druchii_cult_characters.bin`, orphan
+  assert, joins the Cult pack's unit sets). Sorceress (Slaanesh) hero and Supreme Sorceress
+  (Slaanesh) lord: Lore of Dark Magic row swapped for Lore of Slaanesh in CA's order, spell group
+  `wh3_main_lore_slaanesh`, UI groups `wh3_main_wizard_slaanesh` / `wh3_lord_wizard_slaanesh`, lord
+  `magic_lore = wh3_main_lore_slaanesh` (lore tab). Cultist of Slaanesh: own subtype with female art
+  sets (Dark Elf dignitary heroes are generated female); the vanilla Cultist permission is disabled
+  for the Cult (this pack loads first). Dark Elf hero tab 610 renamed "Priestess" via
+  `text/db/!!druchii_cult_characters_overrides.loc`.
+- START-UP CRASHES (characters pack v2-v4): renamed group keys without group rows (v2/v3), then
+  new rows in `main_unit_ownership_content_pack_junctions` (found by a cumulative table ladder, test
+  2e). v5 loads; v9 confirmed by the author (lore tab, Priestess tab).

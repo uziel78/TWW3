@@ -13,10 +13,12 @@
 -- 5. Unit limits (the units are uncapped in vanilla, so the game's own caps don't apply to them):
 --    Daemonettes / Exalted past the Den/Hall caps or past 6 together in one army are cancelled
 --    and refunded right after being queued, with a short message (no card locks); Bleakswords,
---    Darkshards and Dreadspears are locked while the province caps are reached.
--- 6. Province caps: 2 Bleakswords, 1 Darkshards, 1 Dreadspears per whole province owned.
+--    Darkshards and Dreadspears past their levy caps the same way (v21; v11-v20 locked their cards).
+--    The Dreadspears card is hidden where they can't be raised (no Halls of Ravaging in the army's
+--    province, or no tier 3+ settlement), since the vanilla settlement building offers them.
+-- 6. Levy caps: 1 Bleaksword per settlement, 1 Darkshards per tier 2+ and 1 Dreadspears per tier 3+ settlement.
 -- 7. The Cult's own Conscription Halls, House of Assassins, Slave Gate and Beastmasters chains
---    replace any vanilla ones it owns (same tier). (Until 2026-11-25 Dread Manses were dismantled; they're vanilla again.)
+--    replace any vanilla ones it owns (same tier). (Dread Manses: own Slaanesh version, builder section 25c.)
 -- 8. Har Ganeth Executioners are locked for the Cult on every load.
 -- 9. New campaign: the Cult starts in a military alliance with N'Kari (Seducers of Slaanesh) and
 --    with the Cult of Excess as its vassal, each with +75 relations both ways (permanent bundles)
@@ -28,10 +30,11 @@
 --    towards the Cult start at about 60.
 -- 10. Units from allies (outside the Cult roster) are Expendable (bundle applied on load).
 -- 11. Witch Elves have Pleasure Through Pain instead of Frenzy (bundle applied on load).
--- 12. Sacrifice to Slaanesh (the Cult's rite, locked until a House of Pleasure is built): allied cap,
+-- 12. Sacrifice to Slaanesh (the Cult's rite, locked until a House of Pleasure is built):
 --     a magic item and followers; and the Sacrifice Slaves choice when an army enters Channelling.
 -- 13. Dreadspears have Guardian (bundle applied on load).
 -- 14. The Cult's Open Markets diktat: +600 gold when performed and at each of the next 5 turn starts.
+-- 15. Hero panel: the Dark Elf hero group "Death Hag" reads "Cultist of Slaanesh" for the Cult.
 --
 -- Starting armies and heroes live in the campaign startpos, which can't be safely edited for
 -- Immortal Empires, so this is done by script, as Druchii_Naggarond_MOD does for Malekith.
@@ -358,7 +361,7 @@ end
 ---------------------------------------------------------------------------
 -- The rite's payload applies druchii_cult_rite_slaanesh_bundle (DB) for 6 turns: upkeep, character
 -- corruption and relations (+10 Slaanesh, +5 Elves/Chaos/Norsca) are all data. This script adds:
---   - each rite performed: +3 permanent allied unit cap per army (custom bundle, 3 x rites), and
+--   - each rite performed (no allied cap since v19):
 --     a high-quality magic item for Morathi (or whoever leads the Cult) she doesn't have yet;
 --   - each Cult turn start while the rite lasts: every lord has a small chance to attract a
 --     pleasure-themed Dark Elf follower.
@@ -416,6 +419,7 @@ local function rite_step(name, fn)
 	return result
 end
 
+-- (Unused since v19: the rite no longer raises the allied unit cap. Kept for reference.)
 -- The permanent allied unit cap: 3 per rite performed (saved count), on a custom bundle.
 local function apply_rite_allied_cap()
 	local rites = cm:get_saved_value("druchii_cult_rites_performed") or 0
@@ -515,9 +519,6 @@ local function rite_turn_start()
 	rite_step("sacrifices", expire_sacrifices)
 	if not rite_active(faction) then
 		return
-	end
-	if (cm:get_saved_value("druchii_cult_rites_performed") or 0) > 0 and not faction:has_effect_bundle(RITE_ALLIED_CAP_BUNDLE) then
-		rite_step("allied cap", apply_rite_allied_cap)
 	end
 	-- Followers: characters are only read from turn 2 (nothing reads characters in the turn-1 load).
 	local followers = 0
@@ -717,7 +718,7 @@ core:add_listener("druchii_cult_rite_unlock_turn", "FactionTurnStart",
 		end
 	end, true)
 
--- Right after the rite is performed: +3 permanent allied cap and the gift at once (followers start at
+-- Right after the rite is performed: the gift at once (followers start at
 -- the next turn start).
 core:add_listener("druchii_cult_rite_performed", "RitualCompletedEvent",
 	function(context)
@@ -734,7 +735,6 @@ core:add_listener("druchii_cult_rite_performed", "RitualCompletedEvent",
 			end
 			log("Sacrifice to Slaanesh performed")
 			cm:set_saved_value("druchii_cult_rites_performed", (cm:get_saved_value("druchii_cult_rites_performed") or 0) + 1)
-			rite_step("allied cap", apply_rite_allied_cap)
 			rite_step("gift", function() give_rite_gift(faction) end)
 		end, 0.5)
 	end, true)
@@ -862,6 +862,7 @@ local function count_dens(faction)
 end
 
 local refresh_locks   -- section 5: province-cap card locks
+local set_recruit_cards_hidden   -- section 5b
 
 -- The caps the Dens/Halls allow (saved by update_den_caps).
 local function base_caps()
@@ -939,8 +940,10 @@ local OLD_SORC_BUNDLE = "druchii_cult_sorceress_daemonette_caps"
 --     cancelled by clicking its queued card (the game refunds it) and a short message is shown.
 --     Only units queued past a limit are cancelled, never ones the army/faction already had when
 --     the army was selected.
---   Bleakswords, Darkshards, Dreadspears: the card is locked (CA's event restriction) while the
---     faction has as many as its whole provinces allow, or it rules no whole province.
+--   Bleakswords, Darkshards, Dreadspears (v21): handled like Daemonettes. One queued past its levy
+--     cap (section 6) is cancelled and refunded; so is a Dreadspears queued in a province without
+--     Halls of Ravaging. The Dreadspears card is also hidden there (it would otherwise show, as the
+--     vanilla settlement building offers them). No card locks (v11-v20 locked them; cleared on load).
 -- Counts include the recruitment queues, read from each army's UI context
 -- (PendingRecruitmentUnitList, what the army panel shows), so cancels can't drift them.
 -- AI armies aren't limited per army.
@@ -951,11 +954,11 @@ local DAEMONETTE_UNITS = {
 	[EXALTED] = true,
 }
 local ARMY_CAP = 6
--- Units allowed per whole province owned.
+-- Levy units: 1 allowed per owned settlement of at least this tier (section 6).
 local PROVINCE_UNITS = {
-	wh2_main_def_inf_bleakswords_0 = 2,
-	wh2_main_def_inf_darkshards_0 = 1,
-	wh2_main_def_inf_dreadspears_0 = 1,
+	wh2_main_def_inf_bleakswords_0 = 1,
+	wh2_main_def_inf_darkshards_0 = 2,
+	wh2_main_def_inf_dreadspears_0 = 3,
 }
 local COUNTED_UNITS = {}
 for key in pairs(DAEMONETTE_UNITS) do COUNTED_UNITS[key] = true end
@@ -966,7 +969,7 @@ local TOOLTIP_LEVIES = "druchii_cult_province_cap_full"
 local TOOLTIP_NO_HALLS = "druchii_cult_requires_halls_of_ravaging"
 -- Units that need a building in the selected army's province, on top of the province caps.
 -- Dreadspears: the Dark Elf settlement building offers them too (vanilla, every tier), so without
--- this they could be raised with only tier-1 Conscription Halls once a whole province is owned.
+-- this they could be raised with only tier-1 Conscription Halls.
 local HALLS_REQUIRED = {
 	wh2_main_def_inf_dreadspears_0 = { druchii_cult_barracks_3 = true },   -- Halls of Ravaging
 }
@@ -1003,6 +1006,8 @@ local MSG_TITLE = MSG_PREFIX .. "druchii_cult_cancel_title"
 local MSG_ARMY = MSG_PREFIX .. "druchii_cult_cancel_army"
 local MSG_TEMPLES = MSG_PREFIX .. "druchii_cult_cancel_temples"
 local MSG_REFUNDED = MSG_PREFIX .. "druchii_cult_cancel_refunded"
+local MSG_LEVIES = MSG_PREFIX .. "druchii_cult_cancel_levies"
+local MSG_HALLS = MSG_PREFIX .. "druchii_cult_cancel_halls"
 local MSG_PICTURE = 703   -- event picture index (a vanilla scripted event's)
 
 local selected_force_cqi = nil
@@ -1119,12 +1124,13 @@ local function set_lock(unit_key, tooltip)
 	log(unit_key .. (tooltip and (" locked (" .. tooltip .. ")") or " unlocked"))
 end
 
-local function whole_provinces()
-	return cm:get_saved_value("druchii_cult_whole_provinces") or 0
+-- Levy limit for a unit: owned settlements of its minimum tier or higher (saved by section 6).
+local function levy_cap(unit_key)
+	return cm:get_saved_value("druchii_cult_levy_cap_" .. unit_key) or 0
 end
 
 ---------------------------------------------------------------------------
--- 5a. Province caps: card locks
+-- 5a. Counts, levy log line, Dreadspears card visibility (no locks since v21)
 ---------------------------------------------------------------------------
 -- hint_key/hint_delta: the unit just queued (+1) or cancelled (-1). The UI queue can lag a
 -- moment behind the event, so the count is taken as at least / at most the last count +/- 1
@@ -1152,18 +1158,18 @@ refresh_locks = function(hint_key, hint_delta)
 	for key in pairs(DAEMONETTE_UNITS) do
 		set_lock(key, false)
 	end
-	local whole = whole_provinces()
+	-- Levies are never locked either (auto-cancel, 5b); this clears v11-v20's locks.
 	local force = selected_force_cqi and cm:model():military_force_for_command_queue_index(selected_force_cqi)
-	for key, per_province in pairs(PROVINCE_UNITS) do
-		local tooltip = false
-		if whole == 0 then
-			tooltip = TOOLTIP_NO_PROVINCE
-		elseif HALLS_REQUIRED[key] and army and not army_province_has(force, HALLS_REQUIRED[key]) then
-			tooltip = TOOLTIP_NO_HALLS
-		elseif totals[key] >= per_province * whole then
-			tooltip = TOOLTIP_LEVIES
+	for key in pairs(PROVINCE_UNITS) do
+		set_lock(key, false)
+	end
+	-- Dreadspears card: hidden where they can't be raised.
+	if army then
+		local hide = {}
+		for key, buildings in pairs(HALLS_REQUIRED) do
+			hide[key] = levy_cap(key) == 0 or not army_province_has(force, buildings)
 		end
-		set_lock(key, tooltip)
+		cm:callback(function() set_recruit_cards_hidden(hide) end, 0.1)
 	end
 
 	local d_cap, e_cap = base_caps()
@@ -1173,10 +1179,10 @@ refresh_locks = function(hint_key, hint_delta)
 		line = "army " .. selected_force_cqi .. ": " .. (army[DAEMONETTE] + army[EXALTED]) .. "/" .. ARMY_CAP
 			.. " Daemonette units; " .. line
 	end
-	log(line .. "; levies (" .. whole .. " whole provinces) "
-		.. totals.wh2_main_def_inf_bleakswords_0 .. "/" .. 2 * whole .. " Bleakswords, "
-		.. totals.wh2_main_def_inf_darkshards_0 .. "/" .. whole .. " Darkshards, "
-		.. totals.wh2_main_def_inf_dreadspears_0 .. "/" .. whole .. " Dreadspears (incl. queued)")
+	log(line .. "; levies "
+		.. totals.wh2_main_def_inf_bleakswords_0 .. "/" .. levy_cap("wh2_main_def_inf_bleakswords_0") .. " Bleakswords, "
+		.. totals.wh2_main_def_inf_darkshards_0 .. "/" .. levy_cap("wh2_main_def_inf_darkshards_0") .. " Darkshards, "
+		.. totals.wh2_main_def_inf_dreadspears_0 .. "/" .. levy_cap("wh2_main_def_inf_dreadspears_0") .. " Dreadspears (incl. queued)")
 end
 
 ---------------------------------------------------------------------------
@@ -1258,6 +1264,49 @@ local function show_cancel_message(detail_key)
 	end
 end
 
+-- Recruitment option cards (not queued ones) whose id contains a unit key: hidden or shown.
+-- hide = { unit_key = true/false }. The recruitment list is rebuilt when the panel refreshes, so
+-- this runs again after each recruit/cancel and when the panel opens.
+local hidden_logged = {}
+set_recruit_cards_hidden = function(hide)
+	local ok, err = pcall(function()
+		local panel = find_uicomponent(core:get_ui_root(), "units_recruitment")
+		if not panel or not panel:Visible() then
+			return
+		end
+		local found = {}
+		local function walk(uic, depth)
+			local id = uic:Id()
+			if string.sub(id, 1, 14) ~= "QueuedLandUnit" then
+				for key, want_hidden in pairs(hide) do
+					if string.find(id, key, 1, true) then
+						found[key] = (found[key] or 0) + 1
+						if want_hidden == uic:Visible() then
+							uic:SetVisible(not want_hidden)
+						end
+					end
+				end
+			end
+			if depth < 30 then
+				for i = 0, uic:ChildCount() - 1 do
+					walk(UIComponent(uic:Find(i)), depth + 1)
+				end
+			end
+		end
+		walk(panel, 0)
+		for key, want_hidden in pairs(hide) do
+			local state = tostring(want_hidden) .. "/" .. tostring(found[key] or 0)
+			if hidden_logged[key] ~= state then
+				hidden_logged[key] = state
+				log(key .. " card " .. (want_hidden and "hidden" or "shown") .. " (" .. (found[key] or 0) .. " card(s) found)")
+			end
+		end
+	end)
+	if not ok then
+		log("WARNING: recruitment card visibility: " .. tostring(err))
+	end
+end
+
 local enforce_attempts = 0
 -- What the selected army / faction already had before you started queuing (taken when the army
 -- is selected, and lowered whenever a check finds less). Units are only cancelled down to
@@ -1279,6 +1328,9 @@ local function take_baseline()
 	local totals, army = count_in_faction(faction)
 	if army then
 		before = { army = army[DAEMONETTE] + army[EXALTED], [DAEMONETTE] = totals[DAEMONETTE], [EXALTED] = totals[EXALTED] }
+		for key in pairs(PROVINCE_UNITS) do
+			before[key] = totals[key]
+		end
 	end
 end
 
@@ -1330,6 +1382,27 @@ local function enforce_daemonette_caps(issued_key, is_follow_up)
 			end
 		end
 	end
+	-- Levies (v21): past the levy cap (or what the faction already had), or a Dreadspears queued
+	-- where there are no Halls of Ravaging in the army's province.
+	if not cancel_key then
+		local order = { issued_key }
+		for key in pairs(PROVINCE_UNITS) do order[#order + 1] = key end
+		for _, key in ipairs(order) do
+			if key and PROVINCE_UNITS[key] and (queued[key] or 0) > 0 then
+				if HALLS_REQUIRED[key] and not army_province_has(force, HALLS_REQUIRED[key]) then
+					cancel_key, reason = key, MSG_HALLS
+					break
+				elseif totals[key] > math.max(levy_cap(key), b[key] or 0) then
+					cancel_key, reason = key, MSG_LEVIES
+					break
+				end
+			end
+		end
+		if cancel_key then
+			log("Levy check, army " .. selected_force_cqi .. ": " .. totals[cancel_key] .. "/" .. levy_cap(cancel_key)
+				.. " " .. cancel_key .. " (incl. queued) -> cancelling one (" .. reason .. ")")
+		end
+	end
 	log("Daemonette check, army " .. selected_force_cqi .. ": " .. army_total .. "/" .. limit.army
 		.. "; faction " .. totals[DAEMONETTE] .. "/" .. limit[DAEMONETTE] .. " Daemonettes, " .. totals[EXALTED] .. "/"
 		.. limit[EXALTED] .. " Exalted (incl. queued)" .. (cancel_key and (" -> over the limit, cancelling a " .. cancel_key) or ""))
@@ -1341,6 +1414,9 @@ local function enforce_daemonette_caps(issued_key, is_follow_up)
 			before.army = math.min(before.army, army_total)
 			before[DAEMONETTE] = math.min(before[DAEMONETTE], totals[DAEMONETTE])
 			before[EXALTED] = math.min(before[EXALTED], totals[EXALTED])
+			for key in pairs(PROVINCE_UNITS) do
+				before[key] = math.min(before[key] or 0, totals[key])
+			end
 		end
 		return
 	end
@@ -1429,13 +1505,12 @@ core:add_listener("druchii_cult_locks_issued", "RecruitmentItemIssuedByPlayer",
 	function(context) return is_local_cult(context:faction()) end,
 	function(context)
 		local key = event_unit_key(context)
-		if key and DAEMONETTE_UNITS[key] then
+		if key and (DAEMONETTE_UNITS[key] or PROVINCE_UNITS[key]) then
 			-- Wait until the queued card is on the army panel, then check the limits.
 			cm:callback(function() enforce_daemonette_caps(key) end, 0.2)
-		elseif key and PROVINCE_UNITS[key] then
-			refresh_locks(key, 1)
-			refresh_locks_later()
 		end
+		-- The recruitment list is rebuilt after a click: re-apply the Dreadspears card visibility.
+		refresh_locks_later()
 	end, true)
 
 core:add_listener("druchii_cult_locks_cancelled", "RecruitmentItemCancelledByPlayer",
@@ -1444,8 +1519,8 @@ core:add_listener("druchii_cult_locks_cancelled", "RecruitmentItemCancelledByPla
 		local key = event_unit_key(context)
 		if key and PROVINCE_UNITS[key] then
 			refresh_locks(key, -1)
-			refresh_locks_later()
 		end
+		refresh_locks_later()
 	end, true)
 
 -- Moving units between armies, disbanding or losing units changes the counts: recheck the
@@ -1472,37 +1547,48 @@ core:add_listener("druchii_cult_locks_panel", "PanelOpenedCampaign",
 	end, true)
 
 ---------------------------------------------------------------------------
--- 6. Province caps: 2 Bleakswords, 1 Darkshards, 1 Dreadspears per whole province owned
+-- 6. Levy caps: 1 Bleaksword per settlement, 1 Darkshards per tier 2+, 1 Dreadspears per tier 3+
 ---------------------------------------------------------------------------
--- Values go on a custom copy of the DB bundle druchii_cult_province_unit_caps (shown in the faction
--- effects). The limits are enforced by the locks in section 5, which read the saved whole-province
--- count; with no whole province the three units are locked.
+-- (v17; until v16: 2/1/1 per whole province.) Settlement tier = the number at the end of the
+-- main settlement building (wh2_main_def_settlement_minor_2 -> 2, ..._major_4 -> 4). Values go on
+-- a custom copy of the DB bundle druchii_cult_province_unit_caps (shown in the faction effects);
+-- the limits are enforced by the locks in section 5, which read the saved caps. Counted at load,
+-- at the Cult's turn start, when it gains or loses a settlement and when a settlement upgrade
+-- completes.
 local PROV_BUNDLE = "druchii_cult_province_unit_caps"
-local PROVINCE_CAPS = {
-	druchii_cult_effect_unit_cap_bleakswords = 2,
-	druchii_cult_effect_unit_cap_darkshards = 1,
-	druchii_cult_effect_unit_cap_dreadspears = 1,
+local LEVY_EFFECTS = {
+	druchii_cult_effect_unit_cap_bleakswords = "wh2_main_def_inf_bleakswords_0",
+	druchii_cult_effect_unit_cap_darkshards = "wh2_main_def_inf_darkshards_0",
+	druchii_cult_effect_unit_cap_dreadspears = "wh2_main_def_inf_dreadspears_0",
 }
 
-local function count_whole_provinces(faction)
-	local total, owned = {}, {}
-	local regions = cm:model():world():region_manager():region_list()
+local function settlement_tier(region)
+	local ok, tier = pcall(function()
+		local slot = region:settlement():primary_slot()
+		if slot:is_null_interface() or not slot:has_building() then
+			return 0
+		end
+		return tonumber(string.match(slot:building():name(), "_(%d+)$")) or 0
+	end)
+	return ok and tier or 0
+end
+
+-- {unit key = number of owned settlements of at least its tier}
+local function count_levy_caps(faction)
+	local caps = {}
+	for key in pairs(PROVINCE_UNITS) do
+		caps[key] = 0
+	end
+	local regions = faction:region_list()
 	for i = 0, regions:num_items() - 1 do
-		local province = regions:item_at(i):province_name()
-		total[province] = (total[province] or 0) + 1
-	end
-	local own_regions = faction:region_list()
-	for i = 0, own_regions:num_items() - 1 do
-		local province = own_regions:item_at(i):province_name()
-		owned[province] = (owned[province] or 0) + 1
-	end
-	local whole = 0
-	for province, count in pairs(owned) do
-		if count == total[province] then
-			whole = whole + 1
+		local tier = settlement_tier(regions:item_at(i))
+		for key, min_tier in pairs(PROVINCE_UNITS) do
+			if tier >= min_tier then
+				caps[key] = caps[key] + 1
+			end
 		end
 	end
-	return whole
+	return caps
 end
 
 local function update_province_caps()
@@ -1510,26 +1596,35 @@ local function update_province_caps()
 	if not faction or faction:is_null_interface() or faction:is_dead() then
 		return
 	end
-	log("step: counting whole provinces")
-	local whole = count_whole_provinces(faction)
-	log("step: " .. whole .. " whole provinces")
-	if cm:get_saved_value("druchii_cult_whole_provinces") == whole and faction:has_effect_bundle(PROV_BUNDLE) then
+	log("step: counting settlements by tier")
+	local caps = count_levy_caps(faction)
+	local changed = false
+	for key, cap in pairs(caps) do
+		if cm:get_saved_value("druchii_cult_levy_cap_" .. key) ~= cap then
+			changed = true
+		end
+	end
+	if not changed and faction:has_effect_bundle(PROV_BUNDLE) then
 		refresh_locks()
 		return
 	end
-	log("step: province caps, creating bundle")
+	log("step: levy caps, creating bundle")
 	cm:remove_effect_bundle(PROV_BUNDLE, FACTION_KEY)
 	local bundle = cm:create_new_custom_effect_bundle(PROV_BUNDLE)
 	local effects = bundle:effects()
 	for i = 0, effects:num_items() - 1 do
 		local effect = effects:item_at(i)
-		bundle:set_effect_value(effect, (PROVINCE_CAPS[effect:key()] or 0) * whole)
+		local unit_key = LEVY_EFFECTS[effect:key()]
+		bundle:set_effect_value(effect, unit_key and caps[unit_key] or 0)
 	end
 	bundle:set_duration(0)
-	log("step: province caps, applying bundle")
+	log("step: levy caps, applying bundle")
 	cm:apply_custom_effect_bundle_to_faction(bundle, faction)
-	cm:set_saved_value("druchii_cult_whole_provinces", whole)
-	log("whole provinces: " .. whole .. " -> Bleakswords " .. 2 * whole .. ", Darkshards " .. whole .. ", Dreadspears " .. whole)
+	for key, cap in pairs(caps) do
+		cm:set_saved_value("druchii_cult_levy_cap_" .. key, cap)
+	end
+	log("levy caps: Bleakswords " .. caps.wh2_main_def_inf_bleakswords_0 .. ", Darkshards "
+		.. caps.wh2_main_def_inf_darkshards_0 .. ", Dreadspears " .. caps.wh2_main_def_inf_dreadspears_0)
 	refresh_locks()
 end
 
@@ -1542,6 +1637,20 @@ core:add_listener("druchii_cult_province_caps_region", "RegionFactionChangeEvent
 		local previous = context:previous_faction()
 		return (not new_owner:is_null_interface() and new_owner:name() == FACTION_KEY)
 			or (not previous:is_null_interface() and previous:name() == FACTION_KEY)
+	end,
+	function() cm:callback(update_province_caps, 0.2) end, true)
+-- A settlement upgrade changes its tier. Only from turn 2 (turn-1 load crash lesson); building
+-- reads inside pcall.
+core:add_listener("druchii_cult_province_caps_building", "BuildingCompleted",
+	function(context)
+		if cm:model():turn_number() < 2 then
+			return false
+		end
+		local ok, result = pcall(function()
+			local building = context:building()
+			return building:faction():name() == FACTION_KEY and string.find(building:name(), "_settlement_") ~= nil
+		end)
+		return ok and result
 	end,
 	function() cm:callback(update_province_caps, 0.2) end, true)
 
@@ -1560,7 +1669,13 @@ local function convert_barracks(region)
 			local murder_tier = string.match(name, "^wh2_main_def_murder_(%d)$")
 			local gate_tier = string.match(name, "^wh2_main_def_defence_major_(%d)$")
 			local beasts_tier = string.match(name, "^wh2_main_def_beasts_(%d)$")
-			if beasts_tier then
+			local manse_tier = string.match(name, "^wh2_main_def_coldones_(%d)$")
+			if manse_tier then
+				log("step: converting Dread Manse tier " .. manse_tier .. " at " .. region:name())
+				cm:region_slot_instantly_dismantle_building(slot)
+				cm:region_slot_instantly_upgrade_building(slot, "druchii_cult_coldones_" .. manse_tier)
+				log(region:name() .. ": Dread Manse tier " .. manse_tier .. " converted to the Cult version")
+			elseif beasts_tier then
 				log("step: converting Beastmasters tier " .. beasts_tier .. " at " .. region:name())
 				cm:region_slot_instantly_dismantle_building(slot)
 				cm:region_slot_instantly_upgrade_building(slot, "druchii_cult_beasts_" .. beasts_tier)
@@ -1730,6 +1845,101 @@ local function run_step(name, fn)
 	end
 end
 
+---------------------------------------------------------------------------
+-- 15. Hero panel: "Death Hag" -> "Cultist of Slaanesh" (Cult only)
+---------------------------------------------------------------------------
+-- The hero group's name comes from the Dark Elf culture's "dignitary" row (agent_culture_details
+-- 610), shared by every Dark Elf faction, so it can't be changed in the data for the Cult alone.
+-- Instead, while the Cult is the local player, texts reading "Death Hag" in open panels are
+-- rewritten a moment after a panel opens or something is clicked. The Cult has no Death Hags.
+local HAG_NAME, CULTIST_NAME = nil, nil
+local open_panels = {}
+local relabel_logged = {}
+
+local function relabel_panel(panel_name)
+	local ok, err = pcall(function()
+		HAG_NAME = HAG_NAME or common.get_localised_string("agent_culture_details_onscreen_name_610")
+		CULTIST_NAME = CULTIST_NAME or common.get_localised_string("agent_subtypes_onscreen_name_override_wh3_main_sla_cultist")
+		if not HAG_NAME or HAG_NAME == "" or not CULTIST_NAME or CULTIST_NAME == "" then
+			return
+		end
+		local panel = find_uicomponent(core:get_ui_root(), panel_name)
+		if not panel then
+			return
+		end
+		local count = 0
+		local function walk(uic, depth)
+			local ok_text, text = pcall(function() return uic:GetStateText() end)
+			if ok_text and type(text) == "string" and string.find(text, HAG_NAME, 1, true) then
+				local new_text = string.gsub(text, HAG_NAME, CULTIST_NAME)
+				uic:SetStateText(new_text)
+				count = count + 1
+			end
+			if depth < 30 then
+				for i = 0, uic:ChildCount() - 1 do
+					walk(UIComponent(uic:Find(i)), depth + 1)
+				end
+			end
+		end
+		walk(panel, 0)
+		if count > 0 and not relabel_logged[panel_name] then
+			relabel_logged[panel_name] = true
+			log("hero label: " .. count .. " '" .. HAG_NAME .. "' text(s) relabelled in panel " .. panel_name)
+		end
+	end)
+	if not ok then
+		log("WARNING: hero label: " .. tostring(err))
+	end
+end
+
+-- After a click (a tab or list refresh), only the open panels that had the label before.
+local function relabel_open_panels()
+	for panel_name in pairs(open_panels) do
+		if relabel_logged[panel_name] then
+			relabel_panel(panel_name)
+		end
+	end
+end
+
+-- v21d (2026-11-25): listeners OFF while testing the turn-1 intro black screen (v21, v21b and
+-- v21c went black; v20, without this section, didn't). The functions above are kept.
+local RELABEL_ENABLED = false
+if RELABEL_ENABLED then
+core:add_listener("druchii_cult_relabel_opened", "PanelOpenedCampaign",
+	function() return cm:get_local_faction_name(true) == FACTION_KEY end,
+	function(context)
+		local panel_name = context.string
+		if not panel_name or panel_name == "" then
+			return
+		end
+		if open_panels[panel_name] == nil and not relabel_logged["seen_" .. panel_name] then
+			relabel_logged["seen_" .. panel_name] = false   -- diagnostic: which panels open
+			log("panel opened: " .. panel_name)
+		end
+		-- v21b: only the hero recruitment panel (CA's "character_panel"; any "agent" panel too).
+		-- v21 rewrote texts in every panel, and the game went black during the turn-1 intro right
+		-- after it walked the "events" panel.
+		if not (string.find(panel_name, "character", 1, true) or string.find(panel_name, "agent", 1, true)) then
+			return
+		end
+		open_panels[panel_name] = true
+		cm:callback(function() relabel_panel(panel_name) end, 0.1)
+		cm:callback(function() relabel_panel(panel_name) end, 0.4)
+	end, true)
+core:add_listener("druchii_cult_relabel_closed", "PanelClosedCampaign",
+	function() return cm:get_local_faction_name(true) == FACTION_KEY end,
+	function(context)
+		if context.string then
+			open_panels[context.string] = nil
+		end
+	end, true)
+core:add_listener("druchii_cult_relabel_click", "ComponentLClickUp",
+	function() return next(relabel_logged) ~= nil and cm:get_local_faction_name(true) == FACTION_KEY end,
+	function()
+		cm:callback(relabel_open_panels, 0.1)
+	end, true)
+end
+
 cm:add_first_tick_callback(function()
 	run_step("province_caps", update_province_caps)
 	run_step("barracks", convert_all_barracks)
@@ -1761,10 +1971,19 @@ cm:add_first_tick_callback(function()
 			log("Pleasure Through Pain bundle applied")
 		end
 	end)
+	run_step("allied_host", function()
+		-- Base allied units per army 4 -> 6 (DB bundle, permanent).
+		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_allied_host") then
+			cm:apply_effect_bundle("druchii_cult_allied_host", FACTION_KEY, 0)
+			log("Sworn Allies bundle applied (+2 allied units per army)")
+		end
+	end)
 	run_step("rite_allied_cap", function()
-		-- The allied cap from Sacrifices to Slaanesh (3 per rite), re-applied with the current effect.
-		if (cm:get_saved_value("druchii_cult_rites_performed") or 0) > 0 then
-			apply_rite_allied_cap()
+		-- v19: the rite no longer adds allied units (flat 6 per army from Sworn Allies); remove the old
+		-- +3-per-rite bundle from saves made with v5-v18.
+		if cm:get_faction(FACTION_KEY):has_effect_bundle(RITE_ALLIED_CAP_BUNDLE) then
+			cm:remove_effect_bundle(RITE_ALLIED_CAP_BUNDLE, FACTION_KEY)
+			log("old rite allied cap bundle removed")
 		end
 	end)
 	run_step("guardian", function()
