@@ -15,9 +15,8 @@
 --    and refunded right after being queued, with a short message (no card locks); Bleakswords,
 --    Darkshards and Dreadspears are locked while the province caps are reached.
 -- 6. Province caps: 2 Bleakswords, 1 Darkshards, 1 Dreadspears per whole province owned.
--- 7. The Cult's own Conscription Halls and House of Assassins chains replace any vanilla ones it
---    owns, and any Dread
---    Manse / Palace of Dread Knights (Black Guard, Cold Ones) it owns is dismantled.
+-- 7. The Cult's own Conscription Halls, House of Assassins, Slave Gate and Beastmasters chains
+--    replace any vanilla ones it owns (same tier). (Until 2026-11-25 Dread Manses were dismantled; they're vanilla again.)
 -- 8. Har Ganeth Executioners are locked for the Cult on every load.
 -- 9. New campaign: the Cult starts in a military alliance with N'Kari (Seducers of Slaanesh) and
 --    with the Cult of Excess as its vassal, each with +75 relations both ways (permanent bundles)
@@ -28,10 +27,11 @@
 --    +2 Devoted Marauders of Slaanesh, and +1000 gold at each of his turn starts. Ghrond's relations
 --    towards the Cult start at about 60.
 -- 10. Units from allies (outside the Cult roster) are Expendable (bundle applied on load).
--- 11. Witch Elves and Death Hags have Pleasure Through Pain instead of Frenzy (bundle applied on load).
+-- 11. Witch Elves have Pleasure Through Pain instead of Frenzy (bundle applied on load).
 -- 12. Sacrifice to Slaanesh (the Cult's rite, locked until a House of Pleasure is built): allied cap,
 --     a magic item and followers; and the Sacrifice Slaves choice when an army enters Channelling.
 -- 13. Dreadspears have Guardian (bundle applied on load).
+-- 14. The Cult's Open Markets diktat: +600 gold when performed and at each of the next 5 turn starts.
 --
 -- Starting armies and heroes live in the campaign startpos, which can't be safely edited for
 -- Immortal Empires, so this is done by script, as Druchii_Naggarond_MOD does for Malekith.
@@ -1546,9 +1546,9 @@ core:add_listener("druchii_cult_province_caps_region", "RegionFactionChangeEvent
 	function() cm:callback(update_province_caps, 0.2) end, true)
 
 ---------------------------------------------------------------------------
--- 7. Vanilla Conscription Halls -> the Cult's own Halls (same tier)
+-- 7. Vanilla Conscription Halls / House of Assassins / Slave Gate / Beastmasters -> the Cult's own (same tier)
 ---------------------------------------------------------------------------
--- The vanilla chain is disabled for the Cult in the DB; any vanilla Halls it owns (at the start,
+-- The vanilla chains are disabled for the Cult in the DB; any vanilla one it owns (at the start,
 -- or in a captured settlement) is swapped for the Cult version of the same tier.
 local function convert_barracks(region)
 	local slots = region:slot_list()
@@ -1558,10 +1558,18 @@ local function convert_barracks(region)
 			local name = slot:building():name()
 			local tier = string.match(name, "^wh2_main_def_barracks_(%d)$")
 			local murder_tier = string.match(name, "^wh2_main_def_murder_(%d)$")
-			if string.match(name, "^wh2_main_def_coldones_%d$") then
-				log("step: dismantling " .. name .. " at " .. region:name())
+			local gate_tier = string.match(name, "^wh2_main_def_defence_major_(%d)$")
+			local beasts_tier = string.match(name, "^wh2_main_def_beasts_(%d)$")
+			if beasts_tier then
+				log("step: converting Beastmasters tier " .. beasts_tier .. " at " .. region:name())
 				cm:region_slot_instantly_dismantle_building(slot)
-				log(region:name() .. ": " .. name .. " dismantled (no Black Guard/Cold Ones for the Cult)")
+				cm:region_slot_instantly_upgrade_building(slot, "druchii_cult_beasts_" .. beasts_tier)
+				log(region:name() .. ": Beastmasters tier " .. beasts_tier .. " converted to the Cult version")
+			elseif gate_tier then
+				log("step: converting Slave Gate tier " .. gate_tier .. " at " .. region:name())
+				cm:region_slot_instantly_dismantle_building(slot)
+				cm:region_slot_instantly_upgrade_building(slot, "druchii_cult_defence_major_" .. gate_tier)
+				log(region:name() .. ": Slave Gate tier " .. gate_tier .. " converted to the Cult version")
 			elseif murder_tier then
 				log("step: converting House of Assassins tier " .. murder_tier .. " at " .. region:name())
 				cm:region_slot_instantly_dismantle_building(slot)
@@ -1576,6 +1584,35 @@ local function convert_barracks(region)
 		end
 	end
 end
+
+-- CA's Beastmaster follower (wh3_campaign_followers.lua) checks for the vanilla chain key, which the
+-- Cult no longer has; the same trigger for the Cult's copy: a lord or hero who has spent a turn in
+-- a Cult region with a Beastmasters building, every 5th turn, 25% chance.
+core:add_listener("druchii_cult_beastmaster_follower", "CharacterTurnStart",
+	function(context)
+		-- Turn check first, before touching the character: turn-1 CharacterTurnStart fires during
+		-- loading, after the first tick has killed the starting Assassin, and reading characters
+		-- then crashed natively before (see CRASH LESSON). v15 read character:faction() here first
+		-- and the game crashed on turn 1 (2026-11-25), so turn 1 never gets past this line now.
+		local turn = cm:model():turn_number()
+		if turn < 2 or turn % 5 ~= 0 then
+			return false
+		end
+		local ok, result = pcall(function()
+			local character = context:character()
+			return not character:character_type("colonel") and character:faction():name() == FACTION_KEY
+				and character:has_region() and character:turns_in_own_regions() >= 1
+				and cm:region_has_chain_or_superchain(character:region(), "druchii_cult_beasts")
+				and not character:has_ancillary("wh2_main_anc_follower_def_beastmaster")
+		end)
+		return ok and result
+	end,
+	function(context)
+		if cm:model():random_percent(25) then
+			cm:force_add_ancillary(context:character(), "wh2_main_anc_follower_def_beastmaster", false, false)
+			log("Beastmaster follower for " .. context:character():character_subtype_key())
+		end
+	end, true)
 
 local function convert_all_barracks()
 	local faction = cm:get_faction(FACTION_KEY)
@@ -1606,7 +1643,82 @@ core:add_listener("druchii_cult_barracks_turn", "FactionTurnStart",
 	function(context) return context:faction():name() == FACTION_KEY end,
 	function() convert_all_barracks() end, true)
 
--- Every load (new or saved game): the province caps, the Halls/Dread Manse conversion (so
+---------------------------------------------------------------------------
+-- 14. Open Markets (the Cult's copy of the slave diktat): +600 gold per turn for 6 turns
+---------------------------------------------------------------------------
+-- The DB bundle lasts 6 turns and shows the line; there's no flat income effect for a region
+-- bundle, so the gold is paid here with cm:treasury_mod (as for N'Kari): once when the diktat is
+-- performed, then at each of the Cult's next 5 turn starts. Pending payments per region are kept
+-- in a saved string ("region=n;region=n"), so the count survives saving and loading.
+local OPEN_MARKETS_RITUAL = "druchii_cult_ritual_slave_c"
+local OPEN_MARKETS_GOLD = 600
+local OPEN_MARKETS_PAYMENTS = 6
+local OPEN_MARKETS_SAVE = "druchii_cult_open_markets_pending"
+
+local function read_open_markets()
+	local pending = {}
+	for region_key, n in string.gmatch(cm:get_saved_value(OPEN_MARKETS_SAVE) or "", "([^=;]+)=(%d+)") do
+		pending[region_key] = tonumber(n)
+	end
+	return pending
+end
+
+local function write_open_markets(pending)
+	local parts = {}
+	for region_key, n in pairs(pending) do
+		if n > 0 then
+			table.insert(parts, region_key .. "=" .. n)
+		end
+	end
+	cm:set_saved_value(OPEN_MARKETS_SAVE, table.concat(parts, ";"))
+end
+
+local function pay_open_markets(region_key, pending)
+	cm:treasury_mod(FACTION_KEY, OPEN_MARKETS_GOLD)
+	pending[region_key] = (pending[region_key] or 0) - 1
+	log("Open Markets (" .. region_key .. "): +" .. OPEN_MARKETS_GOLD .. " gold, " .. pending[region_key] .. " payments left")
+end
+
+core:add_listener("druchii_cult_open_markets_performed", "RitualCompletedEvent",
+	function(context)
+		return context:succeeded() and context:ritual():ritual_key() == OPEN_MARKETS_RITUAL
+			and context:performing_faction():name() == FACTION_KEY
+	end,
+	function(context)
+		local ok, err = pcall(function()
+			local region_key = context:ritual():ritual_target():get_target_region():name()
+			local pending = read_open_markets()
+			pending[region_key] = OPEN_MARKETS_PAYMENTS
+			pay_open_markets(region_key, pending)
+			write_open_markets(pending)
+		end)
+		if not ok then
+			log("ERROR paying Open Markets: " .. tostring(err))
+		end
+	end, true)
+
+core:add_listener("druchii_cult_open_markets_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY end,
+	function()
+		local ok, err = pcall(function()
+			local pending = read_open_markets()
+			local any = false
+			for region_key, n in pairs(pending) do
+				if n > 0 then
+					pay_open_markets(region_key, pending)
+					any = true
+				end
+			end
+			if any then
+				write_open_markets(pending)
+			end
+		end)
+		if not ok then
+			log("ERROR paying Open Markets: " .. tostring(err))
+		end
+	end, true)
+
+-- Every load (new or saved game): the province caps, the building conversions (so
 -- existing saves pick them up) and the Den caps.
 -- Crash notes: reading the character list in the turn-1 load (after the starting Assassin is
 -- killed) crashed the game, so nothing here touches characters.
@@ -1642,7 +1754,8 @@ cm:add_first_tick_callback(function()
 		end
 	end)
 	run_step("pleasure_through_pain", function()
-		-- Witch Elves and Death Hags: Frenzy -> Pleasure Through Pain (DB bundle, permanent).
+		-- Witch Elves: Frenzy -> Pleasure Through Pain (DB bundle, permanent; the Death Hags were
+		-- dropped from it in the DB, 2026-11-25, so the same bundle key just covers less).
 		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_pleasure_through_pain") then
 			cm:apply_effect_bundle("druchii_cult_pleasure_through_pain", FACTION_KEY, 0)
 			log("Pleasure Through Pain bundle applied")

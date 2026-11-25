@@ -83,6 +83,27 @@ for building in ['wh2_main_def_pleasure_cult_2', 'wh2_main_def_pleasure_cult_3']
                                                 key=new_key(building + DEVOTEES, taken)))
 
 # --------------------------------------------------------------------------
+# 2b. More Slaanesh recruits (user, 2026-11-25), Cult of Pleasure only (faction rows, as above):
+#      Seekers of Slaanesh   House of Pleasure (Pleasure Cult tier 3) and up
+#      Spawn of Slaanesh     Sorceress' Abode (the Sorcery building of settlement tier 3) and up
+#    A level only offers the units it lists itself, so every level from the first one gets a row.
+#    The units (and the Cultist hero's unit, section 17) also join the Cult roster, Morathi's
+#    military group wh3_main_def_morathi (used by the Cult and its separatists only), which already
+#    holds the Daemonettes, Devotees and the Druchii Anointed.
+# --------------------------------------------------------------------------
+SEEKERS = 'wh3_main_sla_cav_seekers_of_slaanesh_0'
+SPAWN = 'wh3_main_sla_mon_spawn_of_slaanesh_0'
+FURIES, PREYTON = 'wh3_main_sla_inf_chaos_furies_0', 'wh3_dlc27_sla_mon_preyton'   # Beastmasters, section 25b
+ROSTER_ADDITIONS = [SEEKERS, SPAWN, FURIES, PREYTON, 'wh3_main_sla_cha_cultist_0']
+for unit, buildings in [(SEEKERS, ['wh2_main_def_pleasure_cult_3', 'wh2_main_def_pleasure_cult_4', 'wh2_main_def_pleasure_cult_5']),
+                        (SPAWN, ['wh2_main_def_sorcery_1', 'wh2_main_def_sorcery_2'])]:
+    for building in buildings:
+        add('building_units_allowed_tables', **dict(template, building=building, unit=unit, faction=FACTION, enabled=True,
+                                                    key=new_key(building + unit, taken)))
+for unit in ROSTER_ADDITIONS:
+    add('units_to_groupings_military_permissions_tables', unit=unit, military_group='wh3_main_def_morathi')
+
+# --------------------------------------------------------------------------
 # 3. Daemonette caps (faction-wide, separate per unit): 5 Daemonettes / 2 Exalted in the faction bundle. CA's own
 #    unit-cap system (bonus value unit_cap on the unit record, as the Tomb Kings/Eltharion use).
 #    +1 Daemonettes per Den of Indulgence (Pleasure Cult tier 2 and up) and +1 Exalted per Halls of
@@ -149,9 +170,9 @@ loc['campaign_localised_strings_string_druchii_cult_army_daemonette_cap'] = (
 #    immune_to_psychology and strider attributes, plus the stats CA builds into marked units
 #    (+5% physical resistance like the Slaanesh Chaos Warriors, and +10% speed).
 #    Units: the Cult's own roster (Morathi's military group), without lords, Regiments of Renown,
-#    Daemons, and units that already have the Mark (the Devotees); plus all Dark Elf heroes
-#    (every Sorceress lore, Master, Death Hag, Khainite Assassin; user 2026-11-24, which also
-#    reverses the earlier Assassin exclusion). An attribute a unit already has (Black Guard /
+#    Daemons, and units that already have the Mark (the Devotees); plus the Dark Elf heroes
+#    (every Sorceress lore, Master, Khainite Assassin; user 2026-11-24, which also reverses the
+#    earlier Assassin exclusion; Death Hags taken out again 2026-11-25). An attribute a unit already has (Black Guard /
 #    Executioners' / the Assassin's Immune to Psychology, the Assassin's Strider) isn't given again.
 # --------------------------------------------------------------------------
 groups = {}
@@ -181,7 +202,8 @@ for r in table(db, 'units_to_groupings_military_permissions_tables'):
 # All Dark Elf heroes (every variant/mount; the roster only lists some of them). The Druchii
 # Anointed (a Slaanesh hero) already has the Mark.
 for u, m in sorted(main_units.items()):
-    if m['caste'] == 'hero' and '_def_cha_' in u and u not in NO_MARK and not m['is_renown']:
+    # Death Hags left out again (user, 2026-11-25: the Cult recruits Cultists of Slaanesh instead).
+    if m['caste'] == 'hero' and '_def_cha_' in u and '_death_hag' not in u and u not in NO_MARK and not m['is_renown']:
         attrs = groups.get(land_units[m['land_unit']]['attribute_group'], set())
         if 'mark_slaanesh' not in attrs and 'daemonic' not in attrs:
             mark_units.append((u, attrs))
@@ -342,14 +364,9 @@ loc['campaign_localised_strings_string_druchii_cult_no_whole_province'] = (
     '[[col:red]]The Cult must rule a whole province to raise this regiment.[[/col]]')
 
 # --------------------------------------------------------------------------
-# 7. No Dread Manse / Palace of Dread Knights (wh2_main_def_coldones: Black Guard, Cold One
-#    Knights, Cold One Chariots) for the Cult: disabled per faction like the vanilla Halls above.
-#    The campaign script dismantles any the Cult owns or captures.
+# 7. (Removed 2026-11-25: v1-v13 disabled the Dread Manse / Palace of Dread Knights for the Cult;
+#    the user wants the vanilla chain back. The script no longer dismantles them either.)
 # --------------------------------------------------------------------------
-for n in (1, 2):
-    v = next(r for r in table(db, 'building_culture_variants_tables')
-             if r['building'] == f'wh2_main_def_coldones_{n}' and not r['faction'] and not r['culture'] and not r['subculture'])
-    add('building_culture_variants_tables', **dict(v, faction=FACTION, disables=True))
 
 # --------------------------------------------------------------------------
 # 8. No Har Ganeth Executioners for the Cult (they'd come from the Executioner's Hall and the
@@ -438,12 +455,12 @@ for r in table(db, 'campaign_group_rituals_tables'):
             loc[f'campaign_group_rituals_unlock_text_{CULT_RITE_GROUP}{ritual}'] = unlock
 
 # The rite: Mathlann's row (cooldowns, category) with its own payload and cost.
-# Icon: there's no Slaanesh rite picture (rite pictures are 320x320 in ui/skins/warhammer2);
-# N'Kari's faction symbol (256x256) stands in for now.
+# Icon: none (user, 2026-11-25). v1-v13 used N'Kari's faction symbol, which the rites panel drew
+# behind the rite's effects. An empty icon is what CA leaves on many rituals (two STANDARD_RITUALs).
 mathlann = next(r for r in table(db, 'rituals_tables') if r['key'] == MATHLANN)
 add('rituals_tables', **dict(mathlann, key=SLAANESH_RITE, completion_payload=SLAANESH_RITE,
                              expended_resources=SLAANESH_RITE,
-                             icon='UI\\flags\\wh3_main_sla_seducers_of_slaanesh\\mon_256.png'))
+                             icon=''))
 # Empty payload: no effects yet.
 payload = next(r for r in table(db, 'ritual_payloads_tables') if r['key'] == MATHLANN)
 add('ritual_payloads_tables', **dict(payload, key=SLAANESH_RITE))
@@ -612,6 +629,8 @@ EXPENDABLE_BUNDLE = 'druchii_cult_allied_expendable'
 # (allied_recruitment_unit_permissions), minus the Cult roster and characters.
 cult_roster = {r['unit'] for r in table(db, 'units_to_groupings_military_permissions_tables')
                if r['military_group'] == 'wh3_main_def_morathi'}
+# + the Slaanesh units added to the Cult roster (section 2b), so the Cult's own aren't Expendable.
+cult_roster |= set(ROSTER_ADDITIONS)
 castes = {r['unit']: r['caste'] for r in table(db, 'main_units_tables')}
 allied_units = sorted(r['unit'] for r in table(db, 'allied_recruitment_unit_permissions_tables')
                       if r['unit'] not in cult_roster and castes.get(r['unit']) not in ('lord', 'hero', None))
@@ -631,14 +650,15 @@ add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=EXPENDABLE_B
 print('Expendable: allied-unit set lists', len(allied_units), 'units')
 
 # --------------------------------------------------------------------------
-# 14. Witch Elves and Death Hags: Frenzy -> Pleasure Through Pain (Slaangors' passive), Cult only
+# 14. Witch Elves: Frenzy -> Pleasure Through Pain (Slaangors' passive), Cult only
 # --------------------------------------------------------------------------
+# (Death Hags had it too until 2026-11-25; the user undid every Death Hag change.)
 # Frenzy is on the land units (land_units_to_unit_abilites_junctions has no faction column), so a
 # Cult faction effect switches it off (bonus value 'disable', as CA disables Malus' Tzarkan or the
 # High Elf passives) and switches Pleasure Through Pain on ('enable'), for an explicit unit set.
 # No tech touches Frenzy for Dark Elves (theirs only change Witch Elf stats). The Witch Elves RoR
 # (Sisters of the Singing Doom) keeps Frenzy. In its own bundle, applied by the script on load.
-PTP_UNITS = ['wh2_main_def_inf_witch_elves_0', 'wh2_main_def_cha_death_hag_0', 'wh2_main_def_cha_death_hag_1']
+PTP_UNITS = ['wh2_main_def_inf_witch_elves_0']
 PTP_SET = 'druchii_cult_pleasure_through_pain_units'
 PTP_BUNDLE = 'druchii_cult_pleasure_through_pain'
 FRENZY_OFF = 'druchii_cult_effect_frenzy_off'
@@ -651,8 +671,8 @@ for effect, ability, bonus in [(FRENZY_OFF, 'wh_main_unit_passive_frenzy', 'disa
         unit_set_ability=effect)
     add('effects_tables', effect=effect, icon='general_ability.png', priority=3, icon_negative='general_ability.png',
         category='battle', is_positive_value_good=True)
-loc[f'effects_description_{FRENZY_OFF}'] = 'Passive ability "Frenzy" removed for Witch Elves and Death Hags'
-loc[f'effects_description_{PTP_ON}'] = 'Passive ability: "Pleasure Through Pain" for Witch Elves and Death Hags (instead of Frenzy)'
+loc[f'effects_description_{FRENZY_OFF}'] = 'Passive ability "Frenzy" removed for Witch Elves'
+loc[f'effects_description_{PTP_ON}'] = 'Passive ability: "Pleasure Through Pain" for Witch Elves (instead of Frenzy)'
 add('effect_bundles_tables', **dict(template_bundle, key=PTP_BUNDLE, localised_title='Pleasure Through Pain',
                                     localised_description='', ui_icon='slaanesh_points.png'))
 loc[f'effect_bundles_localised_title_{PTP_BUNDLE}'] = 'Pleasure Through Pain'
@@ -684,22 +704,36 @@ for r in table(db, 'faction_agent_permitted_subtypes_tables'):
         add('faction_agent_permitted_subtypes_tables', **dict(r, mod_disabled=True))
 
 # --------------------------------------------------------------------------
-# 17. Death Hags without the Cauldron of Blood mount (Cult only)
+# 17. Cultist of Slaanesh instead of the Death Hag (Cult only)
 # --------------------------------------------------------------------------
-# The mount is a skill node in the Death Hag skill tree, which all Dark Elf factions share. CA gives
-# single factions their own copy of a hero's tree with a faction_key set (the DLC27 "affinity"
-# sets, e.g. Avelorn's Handmaidens). The Cult gets one: every node of the vanilla Death Hag tree
-# except the mount (no links or locks point at it). Existing Hags keep a mount already learned.
-HAG_SET = 'wh2_main_skill_node_set_def_death_hag'
-HAG_MOUNT_NODE = 'wh2_main_skill_node_def_death_hag_mount_1'
-CULT_HAG_SET = 'druchii_cult_skill_node_set_def_death_hag'
-vanilla_set = next(r for r in table(db, 'character_skill_node_sets_tables') if r['key'] == HAG_SET)
-add('character_skill_node_sets_tables', **dict(vanilla_set, key=CULT_HAG_SET, faction_key=FACTION))
-hag_items = [r for r in table(db, 'character_skill_node_set_items_tables') if r['set'] == HAG_SET]
-for r in hag_items:
-    if r['item'] != HAG_MOUNT_NODE:
-        add('character_skill_node_set_items_tables', **dict(r, set=CULT_HAG_SET))
-print('Cult Death Hag skill tree:', len(hag_items) - 1, 'of', len(hag_items), 'nodes (no mount)')
+# Both are the dignitary agent type. The Cult's Death Hag row in faction_agent_permitted_subtypes is
+# overridden with mod_disabled (as section 16 does for the Dreadlords) and the Slaanesh Cultist gets
+# a Cult row. (v1-v13 gave the Cult's Death Hags a skill tree without the Cauldron of Blood mount;
+# undone 2026-11-25 with the Hags' Mark of Slaanesh and Pleasure Through Pain.)
+# Recruitment in the Pleasure Cult chain, the Death Hag's building, one tier earlier: Death Hag
+# capacity +1 at tiers 3-5 and recruit rank +2 (tier 4) / +4 (tier 5) -> Cultist capacity +1 at
+# tiers 2-5, rank +2 at tier 3 and +4 at tiers 4-5. The Cultist also needs CA's per-province
+# "enable recruitment" effect (as on the Slaanesh Devotee buildings). Same effects and scopes as
+# CA's rows. The Cultist's own unit goes into the Cult roster (section 2b) like the Druchii Anointed.
+CULTIST = 'wh3_main_sla_cultist'
+for r in table(db, 'faction_agent_permitted_subtypes_tables'):
+    if r['faction'] == FACTION and r['subtype'] == 'wh2_main_def_death_hag':
+        add('faction_agent_permitted_subtypes_tables', **dict(r, mod_disabled=True))
+        add('faction_agent_permitted_subtypes_tables', **dict(r, subtype=CULTIST, mod_disabled=False))
+hag_cap = next(r for r in table(db, 'building_effects_junction_tables')
+               if r['building'] == 'wh2_main_def_pleasure_cult_3' and r['effect'] == 'wh2_main_effect_agent_cap_increase_def_death_hag')
+hag_xp = next(r for r in table(db, 'building_effects_junction_tables')
+              if r['building'] == 'wh2_main_def_pleasure_cult_4' and r['effect'] == 'wh2_main_effect_agent_recruitment_xp_def_death_hag')
+CULTIST_RANK = {3: 2.0, 4: 4.0, 5: 4.0}
+for tier in (2, 3, 4, 5):
+    building = f'wh2_main_def_pleasure_cult_{tier}'
+    add('building_effects_junction_tables', **dict(hag_cap, building=building, effect='wh3_main_effect_agent_cap_increase_sla_cultist'))
+    add('building_effects_junction_tables', **dict(hag_cap, building=building, effect='wh3_main_effect_agent_enable_recruitment_sla_cultist',
+                                                   effect_scope='province_to_province_own_unseen'))
+    if tier in CULTIST_RANK:
+        rank = CULTIST_RANK[tier]
+        add('building_effects_junction_tables', **dict(hag_xp, building=building, effect='wh3_main_effect_agent_recruitment_xp_sla_cultist',
+                                                       value=rank, value_damaged=rank / 2))
 
 # --------------------------------------------------------------------------
 # 18. Sacrifice to Slaanesh: what the rite does
@@ -717,7 +751,10 @@ RITE_ALLIED_CAP_BUNDLE = 'druchii_cult_rite_slaanesh_allied_cap'  # permanent, s
 RITE_UPKEEP_SET = 'druchii_cult_rite_upkeep_units'
 RITE_UPKEEP_UNITS = ['wh2_main_def_inf_witch_elves_0', 'wh3_dlc27_sla_inf_devotees_of_slaanesh',
                      'wh3_dlc27_sla_inf_devotees_of_slaanesh_crossbows', 'wh3_main_sla_inf_daemonette_0',
-                     'wh3_main_sla_inf_daemonette_1']
+                     'wh3_main_sla_inf_daemonette_1',
+                     # Seekers, Spawn, Furies and Preytons were covered as allied units until they joined
+                     # the Cult roster (section 2b, 2026-11-25); listed here so they keep the rite's upkeep cut.
+                     SEEKERS, SPAWN, FURIES, PREYTON]
 unit_set(RITE_UPKEEP_SET, sorted(set(RITE_UPKEEP_UNITS) | set(allied_units)))
 
 add('effect_bundles_tables', **dict(template_bundle, key=RITE_BUNDLE, localised_title='Sacrifice to Slaanesh',
@@ -956,6 +993,221 @@ abode_cap = next(r for r in table(db, 'building_effects_junction_tables')
 for tier in (2, 3, 4, 5):
     add('building_effects_junction_tables', **dict(abode_cap, building=f'wh2_main_def_settlement_major_{tier}',
                                                    context_requirement='IsFactionMorathi'))
+
+# --------------------------------------------------------------------------
+# 24. The Cult's own slave diktats: all last 6 turns; Open Markets gives gold per turn (user, 2026-11-25)
+# --------------------------------------------------------------------------
+# Same method as the rites (section 10): the diktats come from the campaign group
+# wh3_main_feature_dark_elves_not_lokhir, which has one member row per faction; the Cult's row
+# (keyed on id) is pointed at the Cult's own group with copies of the three diktats. The province
+# panel lists a faction's rituals by category (SLAVE_RITUAL), and the "other diktats cannot be
+# performed" effect blocks by category too, so the copies behave like the originals.
+# Costs stay the same (the vanilla resource costs are reused, and the diktat cost effects are copied).
+#   Fights to the Death   +10 public order, 6 turns (vanilla 5)
+#   Slave-Drive           +50 growth, 6 turns (vanilla 5)
+#   Open Markets          +600 gold per turn for 6 turns (vanilla: 1500 once). There's no flat
+#                         income effect for a region bundle in CA's data, so the bundle carries a
+#                         text line and the campaign script pays the gold (section 14 of the Lua).
+DIKTAT_GROUP_VANILLA = 'wh3_main_feature_dark_elves_not_lokhir'
+CULT_DIKTAT_GROUP = 'druchii_cult_slave_diktats'
+DIKTAT_TURNS = 6
+OPEN_MARKETS = 'druchii_cult_ritual_slave_c'
+OPEN_MARKETS_BUNDLE = 'druchii_cult_slave_open_markets'
+OPEN_MARKETS_GOLD = 600
+OPEN_MARKETS_TEXT = 'druchii_cult_effect_open_markets_income'
+add('campaign_groups_tables', id=CULT_DIKTAT_GROUP)
+diktat_member = next(r for r in table(db, 'campaign_group_members_tables')
+                     if r['id'] == DIKTAT_GROUP_VANILLA + '_def_cult_of_pleasure')
+add('campaign_group_members_tables', **dict(diktat_member, group=CULT_DIKTAT_GROUP))
+rituals_by_key = {r['key']: r for r in table(db, 'rituals_tables')}
+payload_bundles = table(db, 'ritual_payload_effect_bundles_tables')
+for gr in table(db, 'campaign_group_rituals_tables'):
+    if gr['campaign_group'] != DIKTAT_GROUP_VANILLA:
+        continue
+    vanilla_key = gr['ritual']                                   # wh3_main_ritual_def_slave_a/b/c
+    letter = vanilla_key[-1]
+    key = f'druchii_cult_ritual_slave_{letter}'
+    v = rituals_by_key[vanilla_key]
+    payload_key = f'druchii_cult_slave_action_{letter}'
+    add('campaign_group_rituals_tables', **dict(gr, campaign_group=CULT_DIKTAT_GROUP, ritual=key))
+    loc[f'campaign_group_rituals_unlock_text_{CULT_DIKTAT_GROUP}{key}'] = ''
+    add('rituals_tables', **dict(v, key=key, completion_payload=payload_key))      # same cost (expended_resources)
+    add('ritual_payloads_tables', key=payload_key, human_only=False, payload_base='')
+    loc[f'rituals_display_name_{key}'] = loc_vanilla[f'rituals_display_name_{vanilla_key}']
+    loc[f'rituals_description_{key}'] = loc_vanilla[f'rituals_description_{vanilla_key}']
+    for r in table(db, 'effect_bonus_value_ritual_junctions_tables'):
+        if r['ritual'] == vanilla_key:
+            add('effect_bonus_value_ritual_junctions_tables', **dict(r, ritual=key))
+    vanilla_bundle = next(r['effect_bundle'] for r in payload_bundles if r['payload'] == v['completion_payload'])
+    if key != OPEN_MARKETS:
+        # The vanilla bundle (its own effects and text), just for 6 turns. The vanilla payload has no
+        # other parts (Open Markets' 1500 gold is a resource transaction, not copied).
+        add('ritual_payload_effect_bundles_tables', effect_bundle=vanilla_bundle, payload=payload_key,
+            duration=DIKTAT_TURNS, scale_effects_by_ritual_uses=0.0)
+        continue
+    vb = next(r for r in table(db, 'effect_bundles_tables') if r['key'] == vanilla_bundle)
+    add('effect_bundles_tables', **dict(vb, key=OPEN_MARKETS_BUNDLE))
+    loc[f'effect_bundles_localised_title_{OPEN_MARKETS_BUNDLE}'] = loc_vanilla[f'rituals_display_name_{vanilla_key}']
+    loc[f'effect_bundles_localised_description_{OPEN_MARKETS_BUNDLE}'] = loc_vanilla[f'rituals_description_{vanilla_key}']
+    add('ritual_payload_effect_bundles_tables', effect_bundle=OPEN_MARKETS_BUNDLE, payload=payload_key,
+        duration=DIKTAT_TURNS, scale_effects_by_ritual_uses=0.0)
+    for r in table(db, 'effect_bundles_to_effects_junctions_tables'):
+        if r['effect_bundle_key'] == vanilla_bundle and r['effect_key'] == 'wh3_main_ritual_target_block_slave_actions':
+            add('effect_bundles_to_effects_junctions_tables', **dict(r, effect_bundle_key=OPEN_MARKETS_BUNDLE))
+    dummy = next(r for r in table(db, 'effects_tables') if r['effect'] == 'wh3_main_ritual_def_slave_action_1_reward_dummy')
+    add('effects_tables', **dict(dummy, effect=OPEN_MARKETS_TEXT))
+    loc[f'effects_description_{OPEN_MARKETS_TEXT}'] = (
+        f'Generates [[img:icon_treasury]][[/img]] {OPEN_MARKETS_GOLD} for the treasury each turn while active')
+    add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=OPEN_MARKETS_BUNDLE, effect_key=OPEN_MARKETS_TEXT,
+        effect_scope='region_to_region_own', value=1.0, advancement_stage='start_turn_completed')
+
+# --------------------------------------------------------------------------
+# 25. Cult-only copies of vanilla chains (same method as the allied outpost, section 22): a copy
+#     (druchii_cult_<name>_n, same building instance as vanilla) disabled for everyone but the
+#     Cult, the vanilla chain disabled for the Cult (culture variant faction rows), and every other
+#     row copied as is (effects, tower visuals, AI values, slots, units). The campaign script
+#     converts the vanilla ones the Cult owns or captures (same tier).
+#   25a Slave Gate (wh2_main_def_defence_major: Slave Gate, Blackstone Walls, Dread Bulwark):
+#       garrison Shades -> Devotees of Slaanesh, Shades (Additional Hand Weapons) -> Devotees of
+#       Slaanesh (Crossbows); the Darkshards and Dark Riders stay.
+#   25b Beastmasters (wh2_main_def_beasts, user 2026-11-25): Harpies -> Chaos Furies (Slaanesh) at
+#       every level, Black Dragon -> Preyton (Slaanesh) at the top level; tier 1 "Furies' Roost"
+#       (was Harpy Roost), tier 3 "Preyton's Pen" (was Dragon Hatchery), with new short texts.
+# --------------------------------------------------------------------------
+def cult_chain_copy(vanilla, cult, garrison_swap=None, unit_swap=None, names=None, short_texts=None):
+    rc = lambda v: v.replace(vanilla, cult, 1) if isinstance(v, str) and v.startswith(vanilla + '_') else v
+    for r in table(db, 'building_chains_tables'):
+        if r['key'] == vanilla:
+            add('building_chains_tables', **dict(r, key=cult))
+    for r in table(db, 'building_levels_tables'):
+        if r['chain'] == vanilla:
+            add('building_levels_tables', **dict(r, level_name=rc(r['level_name']), chain=cult))
+    for r in table(db, 'building_upgrades_junction_tables'):
+        if r['from'].startswith(vanilla + '_'):
+            add('building_upgrades_junction_tables', **{'from': rc(r['from']), 'to': rc(r['to'])})
+    for t_name, col in [('building_chain_availability_sets_tables', 'building_chain'), ('building_chain_set_items_tables', 'chain'),
+                        ('building_set_to_building_junctions_tables', 'building_chain'),
+                        ('cai_construction_system_building_values_tables', 'building_chain')]:
+        for r in table(db, t_name):
+            if r[col] == vanilla and (t_name != 'building_chain_availability_sets_tables' or r['id'] == 'wh2_main_bas_def'):
+                add(t_name, **dict(r, **{col: cult}))
+    for r in table(db, 'cai_construction_system_synergies_tables'):
+        if r['potential_buiding_chain_key'] == vanilla:
+            add('cai_construction_system_synergies_tables', **dict(
+                r, potential_buiding_chain_key=cult,
+                potential_building_level_inclusive_start=rc(r['potential_building_level_inclusive_start']),
+                potential_building_level_inclusive_end=rc(r['potential_building_level_inclusive_end'])))
+    for t_name, col in [('building_effects_junction_tables', 'building'),
+                        ('building_levels_campaign_bmd_layer_group_junctions_tables', 'building_level')]:
+        for r in table(db, t_name):
+            if r[col].startswith(vanilla + '_'):
+                add(t_name, **dict(r, **{col: rc(r[col])}))
+    seen = set()
+    for r in table(db, 'building_units_allowed_tables'):
+        if r['building'].startswith(vanilla + '_') and not r['faction']:
+            building, unit = rc(r['building']), (unit_swap or {}).get(r['unit'], r['unit'])
+            if (building, unit) not in seen:      # CA lists a few units twice on one level
+                seen.add((building, unit))
+                add('building_units_allowed_tables', **dict(r, building=building, unit=unit, key=new_key(building + unit, taken)))
+    for r in table(db, 'building_level_armed_citizenry_junctions_tables'):
+        if r['building_level'].startswith(vanilla + '_'):
+            group = rc(r['unit_group'])
+            if group == r['unit_group']:          # a shared group (not named after the level): keep it
+                add('building_level_armed_citizenry_junctions_tables', building_level=rc(r['building_level']),
+                    id=zlib.crc32(f"druchii_cult_{cult}_{r['id']}".encode()) & 0x7fffffff, unit_group=group)
+                continue
+            add('armed_citizenry_unit_groups_tables', unit_group=group)
+            # (ids: "druchii_cult_gate_..." kept from the first version so the Slave Gate rows don't change)
+            tag = 'gate' if vanilla == 'wh2_main_def_defence_major' else cult
+            add('building_level_armed_citizenry_junctions_tables', building_level=rc(r['building_level']),
+                id=zlib.crc32(f"druchii_cult_{tag}_{r['id']}".encode()) & 0x7fffffff, unit_group=group)
+            for u in table(db, 'armed_citizenry_units_to_unit_groups_junctions_tables'):
+                if u['unit_group'] == r['unit_group']:
+                    add('armed_citizenry_units_to_unit_groups_junctions_tables', **dict(
+                        u, unit_group=group, unit=(garrison_swap or {}).get(u['unit'], u['unit']),
+                        id=zlib.crc32(f"druchii_cult_{tag}_unit_{u['id']}".encode()) & 0x7fffffff))
+    for r in table(db, 'building_culture_variants_tables'):
+        if r['building'].startswith(vanilla + '_') and not r['faction']:
+            new_building = rc(r['building'])
+            row = dict(r, building=new_building)
+            if short_texts and new_building in short_texts:
+                row['short_description'] = new_building
+                loc[f'building_short_description_texts_short_description_{new_building}'] = short_texts[new_building]
+            add('building_culture_variants_tables', **dict(row, disables=True))
+            add('building_culture_variants_tables', **dict(row, faction=FACTION, disables=False))
+            add('building_culture_variants_tables', **dict(r, faction=FACTION, disables=True))
+            suffix_key = f"{r['culture']}{r['subculture']}"
+            name = (names or {}).get(new_building) or loc_vanilla.get(f"building_culture_variants_name_{r['building']}{suffix_key}", '')
+            for suffix in ('', FACTION):
+                loc[f"building_culture_variants_name_{new_building}{suffix_key}{suffix}"] = name
+            for f in ('description', 'short_description'):
+                src = f"building_culture_variants_{f}_{r['building']}{suffix_key}"
+                if src in loc_vanilla:
+                    for suffix in ('', FACTION):
+                        loc[f"building_culture_variants_{f}_{new_building}{suffix_key}{suffix}"] = loc_vanilla[src]
+    for f in ('chain_tooltip', 'encyclopedia_name'):
+        src = f'building_chains_{f}_{vanilla}'
+        if src in loc_vanilla:
+            loc[f'building_chains_{f}_{cult}'] = loc_vanilla[src]
+
+
+cult_chain_copy('wh2_main_def_defence_major', 'druchii_cult_defence_major',
+                garrison_swap={'wh2_main_def_inf_shades_0': 'wh3_dlc27_sla_inf_devotees_of_slaanesh',
+                               'wh2_main_def_inf_shades_1': 'wh3_dlc27_sla_inf_devotees_of_slaanesh_crossbows'})
+cult_chain_copy('wh2_main_def_beasts', 'druchii_cult_beasts',
+                unit_swap={'wh2_main_def_inf_harpies': FURIES, 'wh2_main_def_mon_black_dragon': PREYTON},
+                names={'druchii_cult_beasts_1': "Furies' Roost", 'druchii_cult_beasts_3': "Preyton's Pen"},
+                short_texts={
+                    'druchii_cult_beasts_1': "Daemonic Furies of the Dark Prince gather to roost above the Cult's temples.",
+                    'druchii_cult_beasts_3': "The Cult's Beastmasters break the monstrous Preytons to Slaanesh's will."})
+
+# --------------------------------------------------------------------------
+# 26. Slaanesh followers and items for the Cult (user, 2026-11-25)
+# --------------------------------------------------------------------------
+# Who can get an ancillary is its faction_set. CA's follower triggers (wh3_campaign_followers.lua)
+# listen for every faction and only grant what the character's faction may have (drop chance from
+# the faction set), and magic items drop the same way. So the Cult gets copies of the Slaanesh
+# sets (same members + the Cult) and the ancillaries below are pointed at the copies; everyone who
+# had them keeps them. Left out on purpose:
+#  - anything tied to one character (N'Kari's Witstealer Sword, Dechala's / the Masque's / Styrkaar's
+#    items, the Slaanesh mounts of Chaos heroes): quest items and subtype-locked ancillaries;
+#  - followers that only work with Slaanesh's own mechanics: Dominatrix (Disciple armies), Enticer
+#    and Great Tempter (Seduce Units);
+#  - the Banner of Depravity (no way to get it outside its owner's skill/quest);
+#  - shared Chaos-gods sets (Khorne/Nurgle/Tzeentch too): not Slaanesh's own.
+CULT_SLAANESH_ANCILLARIES = [
+    # magic items (randomly dropped)
+    'wh3_main_anc_arcane_item_rod_of_command', 'wh3_main_anc_talisman_jewel_of_denial',
+    'wh3_main_anc_talisman_ring_of_sensation', 'wh3_main_anc_weapon_lash_of_despair',
+    'wh3_main_anc_magic_standard_banner_of_ecstacy', 'wh3_main_anc_magic_standard_siren_standard',
+    # followers (CA's triggers)
+    'wh3_main_anc_follower_sla_agent_of_temptation', 'wh3_main_anc_follower_sla_card_shark',
+    'wh3_main_anc_follower_sla_courtesan', 'wh3_main_anc_follower_sla_cult_neophyte',
+    'wh3_main_anc_follower_sla_cult_treasurer', 'wh3_main_anc_follower_sla_epicurean',
+    'wh3_main_anc_follower_sla_gourmand', 'wh3_main_anc_follower_sla_master_musician',
+    'wh3_main_anc_follower_sla_master_painter', 'wh3_main_anc_follower_sla_master_poet',
+    'wh3_main_anc_follower_sla_paramour', 'wh3_main_anc_follower_sla_slaaneshi_familiar',
+    'wh3_main_anc_follower_sla_slaaneshi_mutant', 'wh3_main_anc_follower_sla_slaaneshi_zealot',
+]
+set_items = table(db, 'faction_set_items_tables')
+taken_set_ids = {r['id'] for r in set_items}
+cult_sets = {}
+for r in table(db, 'ancillaries_tables'):
+    if r['key'] not in CULT_SLAANESH_ANCILLARIES:
+        continue
+    old_set = r['faction_set']
+    if old_set not in cult_sets:
+        new_set = f'druchii_cult_{old_set}'
+        cult_sets[old_set] = new_set
+        add('faction_sets_tables', key=new_set)
+        for it in set_items:
+            if it['set'] == old_set:
+                add('faction_set_items_tables', **dict(it, set=new_set, id=new_key(new_set + str(it['id']), taken_set_ids)))
+        add('faction_set_items_tables', culture='', faction=FACTION, remove=False, set=new_set, subculture='',
+            id=new_key(new_set + FACTION, taken_set_ids))
+    add('ancillaries_tables', **dict(r, faction_set=cult_sets[old_set]))
+assert len(out_tables['ancillaries_tables']) == len(CULT_SLAANESH_ANCILLARIES), 'an ancillary key is missing'
+print('Slaanesh ancillaries for the Cult:', len(CULT_SLAANESH_ANCILLARIES), 'via sets', sorted(cult_sets))
 
 # --------------------------------------------------------------------------
 # Write

@@ -117,3 +117,42 @@ User mods Total War: Warhammer III with RPFM.
   request: it contains an edited copy of Mixu's `campaign_select_new.twui.xml`. It stays in
   `<MASTERS>/warhammer_3/` and in the game's data folder; `.sync` no longer mirrors `!!` packs and
   `.gitignore` lists it. It is still in the first commit's history (8026a4e).
+- Cult v14 (2026-11-25, untested; the author calls the Cult "COP"): (1) Sacrifice to Slaanesh
+  icon='' (N'Kari's flag was drawn behind the rite effects). (2) Dread Manse vanilla again:
+  section 7 + Lua coldones dismantle removed. (3) Section 25: Cult copy
+  `druchii_cult_defence_major_1-3` of the Slave Gate chain (outpost method, same building
+  instance, bmd tower layers copied); garrison Shades -> Devotees of Slaanesh, Shades (Additional
+  Hand Weapons) -> Devotees (Repeater Crossbows); Lua converts vanilla Slave Gates. (4) All Death
+  Hag changes undone (Mark, Pleasure Through Pain, mount-less tree); section 17: the Cult's Death
+  Hag permitted-subtype row mod_disabled, Cultist `wh3_main_sla_cultist` (dignitary, like the Hag)
+  permitted; Pleasure Cult tiers 2-5 give Cultist cap +1 + per-province recruitment, rank +2
+  (tier 3) / +4 (tiers 4-5). (5) Section 24: Cult diktat group `druchii_cult_slave_diktats` (the
+  Cult's member row of `wh3_main_feature_dark_elves_not_lokhir` repointed; the UI lists diktats by
+  category SLAVE_RITUAL, the block effect works by category): all last 6 turns at vanilla cost;
+  the Open Markets copy has no 1500 transaction, Lua section 14 pays +600 on RitualCompletedEvent
+  and at the next 5 Cult turn starts (saved string). (6)+(7) Section 2b: Seekers of Slaanesh at
+  Pleasure Cult 3-5, Spawn of Slaanesh at Sorcery 1-2 (Sorceress' Abode / Tower), faction rows;
+  Seekers, Spawn and the Cultist added to military group `wh3_main_def_morathi` (so not
+  Expendable) and to the rite upkeep set.
+- Cult v15 (2026-11-25, untested): section 25 is now `cult_chain_copy()` (Slave Gate output
+  unchanged) + 25b Beastmasters copy `druchii_cult_beasts_1-3`: Harpies ->
+  `wh3_main_sla_inf_chaos_furies_0` (all tiers), Black Dragon -> `wh3_dlc27_sla_mon_preyton`
+  (tier 3); names "Furies' Roost" / Beastmaster's Stables / "Preyton's Pen" with own short texts;
+  Lua converts vanilla Beastmaster buildings and re-creates CA's Beastmaster follower trigger for
+  the copy (CA's check uses chain key `wh2_main_def_beasts`). Furies + Preyton in the roster and
+  rite upkeep set. Section 26: 20 Slaanesh ancillaries (6 dropped items + 14 followers) repointed
+  to copied faction sets `druchii_cult_anc_set_exclusive_slaanesh` / `_multi_daemons_slaanesh`
+  (same members + the Cult); CA's follower triggers are global and gated by faction set. Left out:
+  subtype/quest items, mounts, Dominatrix/Enticer/Great Tempter (Seduce/Disciple mechanics), Banner
+  of Depravity, multi-god sets.
+- LESSON (2026-11-25): the `building_effects_junction` key is building + effect +
+  context_requirement, so a vanilla effect row can't be gated per faction by an override (it adds
+  a row). The Death Hag building cap/rank rows stay (unseen scopes, inert since the Hag is
+  disabled for the Cult); removing them needs a Cult copy of the Pleasure Cult chain (not done).
+  No data effect adds to faction base income, so Open Markets' +600 is scripted.
+- CRASH 8 (2026-11-25, log `_test29_v15_turn1_crash`): v15 new campaign crashed on turn 1 before
+  any click; script log complete; abort 0xc0000409/7. Cause: the new CharacterTurnStart listener
+  (Beastmaster follower) called `character:faction()` during the turn-1 load, after the first-tick
+  `kill_character`. Fix v15b: turn check first (turn < 2 or turn % 5 ~= 0 -> false), character
+  reads inside pcall. Confirmed by the author: loads past turn 1. LESSON: any Character* listener
+  must bail out on turn 1 before touching `context:character()`.
