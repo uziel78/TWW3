@@ -8,10 +8,13 @@
 --    on the same spot.
 -- 3. Starting building: the Conscription Halls at the Ancient City of Quintex is replaced by a
 --    Den of Indulgence.
--- 4. Daemonette caps: 5 Daemonettes +1 per Den of Indulgence (tier 2+), 2 Exalted +1 per Halls
---    of Hedonism (tier 4+); +1 Khainite Assassin per Executioner's Hall. Mark of Slaanesh bundle.
+-- 4. Daemon caps: 5 Daemonettes +1 per Den of Indulgence (tier 2+), 3 Seekers of Slaanesh +1 per
+--    House of Pleasure (tier 3+), 2 Exalted +1 per Halls of Hedonism (tier 4+), 1 Summoned Daemon
+--    Prince of Slaanesh per Pleasure Cult tier 5; +1 Khainite Assassin per Executioner's Hall.
+--    Mark of Slaanesh bundle.
 -- 5. Unit limits (the units are uncapped in vanilla, so the game's own caps don't apply to them):
---    Daemonettes / Exalted past the Den/Hall caps or past 6 together in one army are cancelled
+--    Daemon units past their temple caps, or Daemonettes / Exalted / Seekers past 6 together in
+--    one army, are cancelled
 --    and refunded right after being queued, with a short message (no card locks); Bleakswords,
 --    Darkshards and Dreadspears past their levy caps the same way (v21; v11-v20 locked their cards).
 --    The Dreadspears card is hidden where they can't be raised (no Halls of Ravaging in the army's
@@ -24,9 +27,10 @@
 --    with the Cult of Excess as its vassal, each with +75 relations both ways (permanent bundles)
 --    and +66 Allegiance both ways (incident payloads). Extra starting heroes: a Sorceress (Lore
 --    of Dark Magic) near the White Tower of Hoeth in Saphery, a Khainite Assassin near Ghrond.
---    Trade agreements with both, and the Cult of Excess leader (Arathar) gets +2 Bleakswords,
---    +1 Darkshards and +2 Dark Riders (Repeater Crossbows); N'Kari gets +2 Daemonettes and
---    +2 Devoted Marauders of Slaanesh, and +1000 gold at each of his turn starts. Ghrond's relations
+--    Trade agreements with both, and the Cult of Excess leader (Arathar) gets +3 Darkshards
+--    (Shields) and +2 Reaper Bolt Throwers; the Cult of Excess gets +600 gold at each of its turn
+--    starts, its starting units a random rank 1-4 each and its lords and heroes level 6.
+--    N'Kari's army and income are vanilla (left for a later N'Kari mod). Ghrond's relations
 --    towards the Cult start at about 60.
 -- 10. Units from allies (outside the Cult roster) are Expendable (bundle applied on load).
 -- 11. Witch Elves have Pleasure Through Pain instead of Frenzy (bundle applied on load).
@@ -177,13 +181,64 @@ local EXCESS_EXTRA_UNITS = {
 }
 local ARMY_SIZE_MAX = 20
 
--- N'Kari (the Seducers of Slaanesh faction leader) too, so he survives the early turns.
-local NKARI_EXTRA_UNITS = {
-	"wh3_main_sla_inf_daemonette_0",      -- Daemonettes of Slaanesh x2
-	"wh3_main_sla_inf_daemonette_0",
-	"wh3_main_sla_inf_marauders_0",       -- Devoted Marauders of Slaanesh x2
-	"wh3_main_sla_inf_marauders_0",
-}
+-- (N'Kari's extra starting units and income were removed 2026-11-26, author: they go into a
+-- later N'Kari faction mod. The alliance, relations, trade and Allegiance with him stay.)
+
+-- Cult of Excess veterans (2026-11-26, author): on a new campaign every unit in its armies gets a
+-- random rank from 1 to 4 (4 = the first silver chevron), rolled fresh each campaign, and every
+-- lord and hero is raised to level 6. Garrisons are left alone; a lord's own unit is skipped
+-- (his level covers it).
+local EXCESS_UNIT_RANK_MIN = 1
+local EXCESS_UNIT_RANK_MAX = 4
+local EXCESS_CHARACTER_LEVEL = 6
+
+local function make_excess_veterans()
+	local faction = cm:get_faction(EXCESS_FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		log("Cult of Excess not found, no veterans")
+		return
+	end
+	local units_done, chars_done = 0, 0
+	local forces = faction:military_force_list()
+	for i = 0, forces:num_items() - 1 do
+		local force = forces:item_at(i)
+		if not force:is_armed_citizenry() then
+			local units = force:unit_list()
+			for j = 0, units:num_items() - 1 do
+				local unit = units:item_at(j)
+				if unit:unit_class() ~= "com" then
+					local target = cm:random_number(EXCESS_UNIT_RANK_MAX, EXCESS_UNIT_RANK_MIN)
+					local delta = target - unit:experience_level()
+					if delta > 0 then
+						local ok, err = pcall(function() cm:add_experience_to_unit(unit, delta) end)
+						if ok then
+							units_done = units_done + 1
+						else
+							log("Cult of Excess: rank for " .. unit:unit_key() .. " FAILED: " .. tostring(err))
+						end
+					end
+				end
+			end
+		end
+	end
+	local characters = faction:character_list()
+	for i = 0, characters:num_items() - 1 do
+		local character = characters:item_at(i)
+		local levels = EXCESS_CHARACTER_LEVEL - character:rank()
+		if levels > 0 then
+			local ok, err = pcall(function()
+				cm:add_agent_experience(cm:char_lookup_str(character), levels, true)
+			end)
+			if ok then
+				chars_done = chars_done + 1
+			else
+				log("Cult of Excess: level for " .. character:character_subtype_key() .. " FAILED: " .. tostring(err))
+			end
+		end
+	end
+	log("Cult of Excess veterans: " .. units_done .. " units ranked " .. EXCESS_UNIT_RANK_MIN .. "-"
+		.. EXCESS_UNIT_RANK_MAX .. ", " .. chars_done .. " lords/heroes to level " .. EXCESS_CHARACTER_LEVEL)
+end
 
 -- Adds units to a faction leader's army (up to the 20-unit limit).
 local function reinforce_faction_leader(faction_key, units, label)
@@ -212,10 +267,9 @@ local function reinforce_faction_leader(faction_key, units, label)
 end
 
 -- Allies' extra income at the start of each of their turns (cm:treasury_mod, as CA's scripts add
--- gold; the game has no faction-wide flat income effect). 2026-11-26, author: N'Kari 1000 -> 600,
--- and the Cult of Excess gets the same.
+-- gold; the game has no faction-wide flat income effect). 2026-11-26, author: Cult of Excess only
+-- (N'Kari's removed).
 local ALLY_INCOME = {
-	[NKARI_FACTION_KEY] = { gold = 600, label = "N'Kari" },
 	[EXCESS_FACTION_KEY] = { gold = 600, label = "Cult of Excess" },
 }
 core:add_listener("druchii_cult_nkari_income", "FactionTurnStart",
@@ -350,7 +404,17 @@ local function send_allegiance(incident_key, receiver_key, towards_keys)
 		.. " sent (incident " .. incident_key .. ")")
 end
 
+-- 2026-11-26 (author): no popup for this at the start; the Allegiance still applies. Incident
+-- messages are switched off while the incidents are sent (CA's disable_event_feed_events, as its
+-- scripts hide messages during scripted set-up) and switched back on a moment later.
+local INCIDENT_SUBCATEGORY = "wh_event_subcategory_faction_event_dilemma_incident"
+
 local function grant_pact_allegiance()
+	cm:disable_event_feed_events(true, "", INCIDENT_SUBCATEGORY, "")
+	cm:callback(function()
+		cm:disable_event_feed_events(false, "", INCIDENT_SUBCATEGORY, "")
+		log("incident messages switched back on")
+	end, 2)
 	local steps = {
 		{ PACT_INCIDENT, FACTION_KEY, { NKARI_FACTION_KEY, EXCESS_FACTION_KEY } },
 		{ PACT_ALLY_INCIDENT, NKARI_FACTION_KEY, { FACTION_KEY } },
@@ -834,6 +898,10 @@ end
 local DEN_BUNDLE = "druchii_cult_den_daemonette_caps"
 local CAP_DAEMONETTES = "druchii_cult_effect_unit_cap_daemonettes"
 local CAP_EXALTED = "druchii_cult_effect_unit_cap_exalted_daemonettes"
+-- 2026-11-26 (author): Seekers of Slaanesh (3 +1 per House of Pleasure, tier 3+, between the
+-- Daemonettes and the Exalted) and the Summoned Daemon Prince of Slaanesh (1 per tier 5).
+local CAP_SEEKERS = "druchii_cult_effect_unit_cap_seekers"
+local CAP_PRINCE = "druchii_cult_effect_unit_cap_daemon_prince"
 local PLEASURE_CULT_TIER = {
 	wh2_main_def_pleasure_cult_1 = 1,
 	wh2_main_def_pleasure_cult_2 = 2,
@@ -842,13 +910,14 @@ local PLEASURE_CULT_TIER = {
 	wh2_main_def_pleasure_cult_5 = 5,
 }
 
-local BASE_DAEMONETTES, BASE_EXALTED = 5, 2
+local BASE_DAEMONETTES, BASE_EXALTED, BASE_SEEKERS, BASE_PRINCE = 5, 2, 3, 0
 local ASSASSIN_CAP = "wh2_main_effect_agent_cap_increase_def_khainite_assassin"
 local EXECUTIONERS_HALL = "druchii_cult_murder_2"   -- only counted for the log
 
--- Returns the number of Dens (tier 2+), Halls of Hedonism (tier 4+) and Executioner's Halls.
+-- Returns the number of Dens (tier 2+), Houses of Pleasure (tier 3+), Halls of Hedonism (tier 4+),
+-- tier 5 temples and Executioner's Halls.
 local function count_dens(faction)
-	local dens, halls, executioners = 0, 0, 0
+	local dens, houses, halls, palaces, executioners = 0, 0, 0, 0, 0
 	local regions = faction:region_list()
 	for i = 0, regions:num_items() - 1 do
 		local slots = regions:item_at(i):slot_list()
@@ -858,43 +927,51 @@ local function count_dens(faction)
 			if tier and tier >= 2 then
 				dens = dens + 1
 			end
+			if tier and tier >= 3 then
+				houses = houses + 1
+			end
 			if tier and tier >= 4 then
 				halls = halls + 1
+			end
+			if tier and tier >= 5 then
+				palaces = palaces + 1
 			end
 			if slot:has_building() and slot:building():name() == EXECUTIONERS_HALL then
 				executioners = executioners + 1
 			end
 		end
 	end
-	return dens, halls, executioners
+	return dens, houses, halls, palaces, executioners
 end
 
 local refresh_locks   -- section 5: province-cap card locks
 local set_recruit_cards_hidden   -- section 5b
 
--- The caps the Dens/Halls allow (saved by update_den_caps).
+-- The caps the temples allow (saved by update_den_caps): Daemonettes, Exalted, Seekers, Prince.
 local function base_caps()
 	local saved = cm:get_saved_value("druchii_cult_den_caps_base")
-	if type(saved) == "table" and saved.d and saved.e then
-		return saved.d, saved.e
+	if type(saved) == "table" and saved.d and saved.e and saved.s and saved.p then
+		return saved.d, saved.e, saved.s, saved.p
 	end
-	return BASE_DAEMONETTES, BASE_EXALTED
+	return BASE_DAEMONETTES, BASE_EXALTED, BASE_SEEKERS, BASE_PRINCE
 end
 
 -- Writes the caps onto the custom bundle (shown in the faction effects; the limit itself is
 -- enforced by the auto-cancel in section 5); does nothing if they're already applied.
-local function apply_caps(daemonette_cap, exalted_cap)
+local function apply_caps(daemonette_cap, exalted_cap, seekers_cap, prince_cap)
 	local faction = cm:get_faction(FACTION_KEY)
 	if not faction or faction:is_null_interface() or faction:is_dead() then
 		return false
 	end
-	local current = daemonette_cap .. "/" .. exalted_cap
+	local current = daemonette_cap .. "/" .. exalted_cap .. "/" .. seekers_cap .. "/" .. prince_cap
 	if cm:get_saved_value("druchii_cult_den_caps_applied") == current and faction:has_effect_bundle(DEN_BUNDLE) then
 		return false
 	end
 	local values = {
 		[CAP_DAEMONETTES] = daemonette_cap,
 		[CAP_EXALTED] = exalted_cap,
+		[CAP_SEEKERS] = seekers_cap,
+		[CAP_PRINCE] = prince_cap,
 		-- The Executioner's Hall's +2 Assassins is now on the Cult's own building (DB), so 0 here.
 		[ASSASSIN_CAP] = 0,
 	}
@@ -916,16 +993,18 @@ local function update_den_caps()
 	if not faction or faction:is_null_interface() or faction:is_dead() then
 		return
 	end
-	local dens, halls, executioners = count_dens(faction)
+	local dens, houses, halls, palaces, executioners = count_dens(faction)
 	local d, e = BASE_DAEMONETTES + dens, BASE_EXALTED + halls
+	local s, p = BASE_SEEKERS + houses, BASE_PRINCE + palaces
 	local old = cm:get_saved_value("druchii_cult_den_caps_base")
-	if not (type(old) == "table" and old.d == d and old.e == e) then
-		cm:set_saved_value("druchii_cult_den_caps_base", { d = d, e = e })
-		log("Dens of Indulgence: " .. dens .. ", Halls of Hedonism: " .. halls .. ", Executioner's Halls: " .. executioners
-			.. " -> Daemonettes cap " .. d .. ", Exalted Daemonettes cap " .. e
+	if not (type(old) == "table" and old.d == d and old.e == e and old.s == s and old.p == p) then
+		cm:set_saved_value("druchii_cult_den_caps_base", { d = d, e = e, s = s, p = p })
+		log("Dens of Indulgence: " .. dens .. ", Houses of Pleasure: " .. houses .. ", Halls of Hedonism: " .. halls
+			.. ", tier 5 temples: " .. palaces .. ", Executioner's Halls: " .. executioners
+			.. " -> caps: Daemonettes " .. d .. ", Exalted " .. e .. ", Seekers " .. s .. ", Daemon Prince " .. p
 			.. " (Executioner's Hall gives its +2 Assassins itself)")
 	end
-	apply_caps(d, e)
+	apply_caps(d, e, s, p)
 	refresh_locks()
 end
 
@@ -957,11 +1036,37 @@ local OLD_SORC_BUNDLE = "druchii_cult_sorceress_daemonette_caps"
 -- AI armies aren't limited per army.
 local DAEMONETTE = "wh3_main_sla_inf_daemonette_0"
 local EXALTED = "wh3_main_sla_inf_daemonette_1"
+local SEEKERS = "wh3_main_sla_cav_seekers_of_slaanesh_0"
+local PRINCE = "druchii_cult_mon_daemon_prince_slaanesh_summoned"
+-- Daemon units with a faction cap from the temples (auto-cancel past it). Seekers and the
+-- Summoned Daemon Prince joined 2026-11-26 (author).
 local DAEMONETTE_UNITS = {
 	[DAEMONETTE] = true,
 	[EXALTED] = true,
+	[SEEKERS] = true,
+	[PRINCE] = true,
+}
+-- The ones that count towards the 6 per army (the Prince doesn't: his cap is 1 per tier 5 temple).
+local ARMY_UNITS = {
+	[DAEMONETTE] = true,
+	[EXALTED] = true,
+	[SEEKERS] = true,
 }
 local ARMY_CAP = 6
+
+local function army_daemons(counts)
+	local n = 0
+	for key in pairs(ARMY_UNITS) do
+		n = n + (counts[key] or 0)
+	end
+	return n
+end
+
+-- Faction caps per daemon unit key.
+local function daemon_caps()
+	local d, e, s, p = base_caps()
+	return { [DAEMONETTE] = d, [EXALTED] = e, [SEEKERS] = s, [PRINCE] = p }
+end
 -- Levy units: 1 allowed per owned settlement of at least this tier (section 6).
 local PROVINCE_UNITS = {
 	wh2_main_def_inf_bleakswords_0 = 1,
@@ -1180,12 +1285,13 @@ refresh_locks = function(hint_key, hint_delta)
 		cm:callback(function() set_recruit_cards_hidden(hide) end, 0.1)
 	end
 
-	local d_cap, e_cap = base_caps()
-	local line = "faction " .. totals[DAEMONETTE] .. "/" .. d_cap .. " Daemonettes, " .. totals[EXALTED] .. "/" .. e_cap
-		.. " Exalted"
+	local caps = daemon_caps()
+	local line = "faction " .. totals[DAEMONETTE] .. "/" .. caps[DAEMONETTE] .. " Daemonettes, " .. totals[EXALTED] .. "/"
+		.. caps[EXALTED] .. " Exalted, " .. totals[SEEKERS] .. "/" .. caps[SEEKERS] .. " Seekers, " .. totals[PRINCE] .. "/"
+		.. caps[PRINCE] .. " Daemon Prince"
 	if army then
-		line = "army " .. selected_force_cqi .. ": " .. (army[DAEMONETTE] + army[EXALTED]) .. "/" .. ARMY_CAP
-			.. " Daemonette units; " .. line
+		line = "army " .. selected_force_cqi .. ": " .. army_daemons(army) .. "/" .. ARMY_CAP
+			.. " daemon units; " .. line
 	end
 	log(line .. "; levies "
 		.. totals.wh2_main_def_inf_bleakswords_0 .. "/" .. levy_cap("wh2_main_def_inf_bleakswords_0") .. " Bleakswords, "
@@ -1335,7 +1441,10 @@ local function take_baseline()
 	end
 	local totals, army = count_in_faction(faction)
 	if army then
-		before = { army = army[DAEMONETTE] + army[EXALTED], [DAEMONETTE] = totals[DAEMONETTE], [EXALTED] = totals[EXALTED] }
+		before = { army = army_daemons(army) }
+		for key in pairs(DAEMONETTE_UNITS) do
+			before[key] = totals[key]
+		end
 		for key in pairs(PROVINCE_UNITS) do
 			before[key] = totals[key]
 		end
@@ -1362,29 +1471,28 @@ local function enforce_daemonette_caps(issued_key, is_follow_up)
 		return
 	end
 	local queued = read_queue(force) or {}
-	local army_total = army[DAEMONETTE] + army[EXALTED]
-	local d_cap, e_cap = base_caps()
-	local b = before or { army = 0, [DAEMONETTE] = 0, [EXALTED] = 0 }
-	local limit = {
-		army = math.max(ARMY_CAP, b.army),
-		[DAEMONETTE] = math.max(d_cap, b[DAEMONETTE]),
-		[EXALTED] = math.max(e_cap, b[EXALTED]),
-	}
+	local army_total = army_daemons(army)
+	local caps = daemon_caps()
+	local b = before or { army = 0 }
+	local limit = { army = math.max(ARMY_CAP, b.army) }
+	for key in pairs(DAEMONETTE_UNITS) do
+		limit[key] = math.max(caps[key], b[key] or 0)
+	end
 	local function has_queued(key)
 		return key and DAEMONETTE_UNITS[key] and (queued[key] or 0) > 0
 	end
 
-	-- What to cancel: a unit over its Den/Hall cap first, else (army over 6) the one just queued.
+	-- What to cancel: a unit over its temple cap first, else (army over 6) the one just queued.
 	local cancel_key, reason = nil, nil
-	for _, key in ipairs({ issued_key, DAEMONETTE, EXALTED }) do
+	for _, key in ipairs({ issued_key, PRINCE, EXALTED, SEEKERS, DAEMONETTE }) do
 		if has_queued(key) and totals[key] > limit[key] then
 			cancel_key, reason = key, MSG_TEMPLES
 			break
 		end
 	end
 	if not cancel_key and army_total > limit.army then
-		for _, key in ipairs({ issued_key, EXALTED, DAEMONETTE }) do
-			if has_queued(key) then
+		for _, key in ipairs({ issued_key, EXALTED, SEEKERS, DAEMONETTE }) do
+			if has_queued(key) and ARMY_UNITS[key] then
 				cancel_key, reason = key, MSG_ARMY
 				break
 			end
@@ -1413,15 +1521,17 @@ local function enforce_daemonette_caps(issued_key, is_follow_up)
 	end
 	log("Daemonette check, army " .. selected_force_cqi .. ": " .. army_total .. "/" .. limit.army
 		.. "; faction " .. totals[DAEMONETTE] .. "/" .. limit[DAEMONETTE] .. " Daemonettes, " .. totals[EXALTED] .. "/"
-		.. limit[EXALTED] .. " Exalted (incl. queued)" .. (cancel_key and (" -> over the limit, cancelling a " .. cancel_key) or ""))
+		.. limit[EXALTED] .. " Exalted, " .. totals[SEEKERS] .. "/" .. limit[SEEKERS] .. " Seekers, " .. totals[PRINCE] .. "/"
+		.. limit[PRINCE] .. " Daemon Prince (incl. queued)" .. (cancel_key and (" -> over the limit, cancelling a " .. cancel_key) or ""))
 	if not cancel_key then
 		enforce_attempts = 0
 		-- Within the limits: if the army/faction has fewer than before (cancelled or lost units),
 		-- that's the new "before", so the old excess can't be refilled.
 		if before then
 			before.army = math.min(before.army, army_total)
-			before[DAEMONETTE] = math.min(before[DAEMONETTE], totals[DAEMONETTE])
-			before[EXALTED] = math.min(before[EXALTED], totals[EXALTED])
+			for key in pairs(DAEMONETTE_UNITS) do
+				before[key] = math.min(before[key] or 0, totals[key])
+			end
 			for key in pairs(PROVINCE_UNITS) do
 				before[key] = math.min(before[key] or 0, totals[key])
 			end
@@ -1770,7 +1880,7 @@ core:add_listener("druchii_cult_barracks_turn", "FactionTurnStart",
 -- 14. Open Markets (the Cult's copy of the slave diktat): +600 gold per turn for 6 turns
 ---------------------------------------------------------------------------
 -- The DB bundle lasts 6 turns and shows the line; there's no flat income effect for a region
--- bundle, so the gold is paid here with cm:treasury_mod (as for N'Kari): once when the diktat is
+-- bundle, so the gold is paid here with cm:treasury_mod (as for the Cult of Excess): once when the diktat is
 -- performed, then at each of the Cult's next 5 turn starts. Pending payments per region are kept
 -- in a saved string ("region=n;region=n"), so the count survives saving and loading.
 local OPEN_MARKETS_RITUAL = "druchii_cult_ritual_slave_c"
@@ -1958,7 +2068,10 @@ end
 --     Imrik dragon script's call; there is no remove function);
 --   - every load: lock the six unwanted ones for the Cult (event restriction, tooltip), as a
 --     backstop if the pool still lists them.
--- The pool is logged before and after the first change, to see what the game did.
+-- 2026-11-26: v24 also read the faction's pool for the log (faction:mercenary_pool()); the game
+-- crashed there on the first tick, before the continue button (pcall doesn't catch an engine
+-- crash). CA only reads pools through a province (region:province():mercenary_pool()). The pool
+-- is no longer read; a line is logged before each call so a crash shows where it happened.
 local ROR_SOURCE = "wh3_main_regiments_of_renown_pool"
 local ROR_REMOVED = {
 	"wh2_dlc10_def_inf_the_hellebronai_ror_0",
@@ -1972,28 +2085,17 @@ local ROR_ADDED = {
 	"wh3_dlc27_sla_mon_preyton_ror",        -- Scourge of Arden
 	"wh3_twa06_sla_inf_daemonette_ror_0",   -- Bringers of Beguilement
 }
+-- Second batch (2026-11-26, author), with its own saved flag so campaigns that already ran the
+-- first batch get these on their next load too.
+local ROR_ADDED_2 = {
+	"wh3_dlc27_sla_mon_champions_of_slaanesh_ror",        -- Pleasure Guard
+	"wh3_twa10_sla_inf_marauders_spears_ror",             -- The Princes of Perfection
+	"wh3_dlc27_nor_cav_marauder_horsemen_ror",            -- Riders of the Mighty Serpent
+	"wh3_twa07_sla_cav_heartseekers_of_slaanesh_ror_0",   -- Eternal Entourage
+}
 local ROR_TOOLTIP = "druchii_cult_ror_not_for_cult"
 local ROR_SAVE = "druchii_cult_ror_pool_v1"
-
-local function log_ror_pool(faction, when)
-	local ok, err = pcall(function()
-		local units = faction:mercenary_pool():mercenary_pool_units()
-		local keys = {}
-		for i = 0, units:num_items() - 1 do
-			local unit = units:item_at(i)
-			local key = unit:unit_record():key()
-			if string.find(key, "_ror", 1, true) then
-				local count = "?"
-				pcall(function() count = tostring(unit:count()) end)
-				keys[#keys + 1] = key .. "=" .. count
-			end
-		end
-		log("RoR pool " .. when .. " (" .. #keys .. "): " .. table.concat(keys, ", "))
-	end)
-	if not ok then
-		log("RoR pool " .. when .. ": couldn't read the faction pool (" .. tostring(err) .. ")")
-	end
-end
+local ROR_SAVE_2 = "druchii_cult_ror_pool_v2"
 
 local function setup_cult_ror()
 	local faction = cm:get_faction(FACTION_KEY)
@@ -2001,28 +2103,41 @@ local function setup_cult_ror()
 		return
 	end
 	if not cm:get_saved_value(ROR_SAVE) then
-		log_ror_pool(faction, "before")
+		-- Saved first: if a call below ever crashes the game, the next load skips it.
+		cm:set_saved_value(ROR_SAVE, true)
 		for _, unit_key in ipairs(ROR_ADDED) do
+			log("RoR adding " .. unit_key)
 			local ok, err = pcall(function()
 				cm:add_unit_to_faction_mercenary_pool(faction, unit_key, ROR_SOURCE, 1, 100, 1, 0.1, "", "", "", true, unit_key)
 			end)
 			log("RoR added " .. unit_key .. (ok and "" or (" FAILED: " .. tostring(err))))
 		end
 		for _, unit_key in ipairs(ROR_REMOVED) do
+			log("RoR zeroing " .. unit_key)
 			local ok, err = pcall(function()
 				cm:add_unit_to_faction_mercenary_pool(faction, unit_key, ROR_SOURCE, 0, 0, 0, 0, "", "", "", false, unit_key)
 			end)
 			log("RoR zeroed " .. unit_key .. (ok and "" or (" FAILED: " .. tostring(err))))
 		end
-		cm:set_saved_value(ROR_SAVE, true)
-		log_ror_pool(faction, "after")
 	end
+	if not cm:get_saved_value(ROR_SAVE_2) then
+		cm:set_saved_value(ROR_SAVE_2, true)
+		for _, unit_key in ipairs(ROR_ADDED_2) do
+			log("RoR adding " .. unit_key)
+			local ok, err = pcall(function()
+				cm:add_unit_to_faction_mercenary_pool(faction, unit_key, ROR_SOURCE, 1, 100, 1, 0.1, "", "", "", true, unit_key)
+			end)
+			log("RoR added " .. unit_key .. (ok and "" or (" FAILED: " .. tostring(err))))
+		end
+	end
+	log("RoR locking the " .. #ROR_REMOVED .. " removed regiments")
 	for _, unit_key in ipairs(ROR_REMOVED) do
 		pcall(function()
 			cm:remove_event_restricted_unit_record_for_faction(unit_key, FACTION_KEY)
 			cm:add_event_restricted_unit_record_for_faction(unit_key, FACTION_KEY, ROR_TOOLTIP)
 		end)
 	end
+	log("RoR setup done")
 end
 
 cm:add_first_tick_callback(function()
@@ -2150,16 +2265,18 @@ cm:add_first_tick_callback_new(function()
 	if not ok then
 		log("ERROR on first tick (Cult of Excess vassal): " .. tostring(err))
 	end
-	-- Arathar's army: +2 Bleakswords, +1 Darkshards, +2 Dark Riders (Repeater Crossbows).
+	-- Arathar's army: +3 Darkshards (Shields), +2 Reaper Bolt Throwers.
 	ok, err = pcall(reinforce_faction_leader, EXCESS_FACTION_KEY, EXCESS_EXTRA_UNITS, "Cult of Excess leader")
 	if not ok then
 		log("ERROR on first tick (Cult of Excess army): " .. tostring(err))
 	end
-	-- N'Kari's army: +2 Daemonettes, +2 Devoted Marauders of Slaanesh.
-	ok, err = pcall(reinforce_faction_leader, NKARI_FACTION_KEY, NKARI_EXTRA_UNITS, "N'Kari")
-	if not ok then
-		log("ERROR on first tick (N'Kari's army): " .. tostring(err))
-	end
+	-- Cult of Excess veterans: a moment later, so the units just granted are in the army.
+	cm:callback(function()
+		local ok3, err3 = pcall(make_excess_veterans)
+		if not ok3 then
+			log("ERROR on first tick (Cult of Excess veterans): " .. tostring(err3))
+		end
+	end, 0.5)
 	-- Trade agreements with N'Kari and the Cult of Excess.
 	ok, err = pcall(make_pact_trade_agreements)
 	if not ok then

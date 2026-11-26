@@ -1281,6 +1281,11 @@ CULT_ROR_REMOVED = [
 CULT_ROR_ADDED = [
     'wh3_dlc27_sla_mon_preyton_ror',        # Scourge of Arden (Preyton)
     'wh3_twa06_sla_inf_daemonette_ror_0',   # Bringers of Beguilement (Exalted Daemonettes)
+    # 2026-11-26 (user): four more from the Slaanesh pool (Lua section 16, second batch).
+    'wh3_dlc27_sla_mon_champions_of_slaanesh_ror',      # Pleasure Guard (Champions of Slaanesh)
+    'wh3_twa10_sla_inf_marauders_spears_ror',           # The Princes of Perfection (Devoted Marauders, Spears)
+    'wh3_dlc27_nor_cav_marauder_horsemen_ror',          # Riders of the Mighty Serpent (Marauder Horsemen)
+    'wh3_twa07_sla_cav_heartseekers_of_slaanesh_ror_0', # Eternal Entourage (Heartseekers of Slaanesh)
 ]
 CULT_ROR_POOL = 'wh2_main_def_units_of_renown_pool'
 exclusive = table(db, 'units_to_exclusive_faction_permissions_tables')
@@ -1310,6 +1315,72 @@ print('Regiments of Renown: removed', len(CULT_ROR_REMOVED), 'added', len(CULT_R
 #     Druchii_Cult-Characters_MOD (build_cult_characters.py), which also disables the vanilla
 #     Cultist permitted below (section 17) for the Cult; without that pack it stays as a fallback.
 # --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# 29. Summoned Daemon Prince of Slaanesh (user 2026-11-26): a monster unit, not a lord
+# --------------------------------------------------------------------------
+# A non-character copy of the custom-battle Daemon Prince of Slaanesh (the Champions of Chaos lord
+# unit wh3_dlc20_chs_cha_daemon_prince_msla): same model (look 3, as the Slaanesh custom-battle
+# roster), stats, attributes and unit abilities, but caste monster / class inf_mel like the Preyton,
+# no spells, skills or items, and it gains unit ranks. Key named "summoned" so a lord version can
+# be added later under its own key. Recruited at the Pleasure Cult tier 5 (Cult only, faction row),
+# cap 1 per Pleasure Cult tier 5 the Cult owns (scripted like the Daemonettes, Lua section 4/5).
+# Card picture: the lord's own 60x130 card picture (ui/portraits/units/...msla 3), copied to
+# ui/units/icons. No ownership rows (they crash the game at startup; see ENGINE_LESSONS).
+# Seekers of Slaanesh get a cap line here too (scripted: 3 +1 per House of Pleasure, tier 3+).
+PRINCE_SRC = 'wh3_dlc20_chs_cha_daemon_prince_msla'
+PRINCE = 'druchii_cult_mon_daemon_prince_slaanesh_summoned'
+PRINCE_VARIANT = 'wh3_dlc20_chs_cha_daemon_prince_msla_3'
+PRINCE_CARD_SRC = 'ui/portraits/units/no_culture/dae_sla_daemon_prince_3_0.png'
+preyton_mu = main_units['wh3_dlc27_sla_mon_preyton']
+add('land_units_tables', **dict(land_units[PRINCE_SRC], key=PRINCE, **{'class': 'inf_mel'}))
+add('main_units_tables', **dict(main_units[PRINCE_SRC], unit=PRINCE, land_unit=PRINCE, caste='monster',
+                                 ui_unit_group_land=preyton_mu['ui_unit_group_land'], tier=4,
+                                 create_time=preyton_mu['create_time'], restrict_xp_gain_in_campaign=False,
+                                 campaign_cap=-1, in_encyclopedia=False, is_renown=False,
+                                 # 2026-11-26 (user): 2000 / 500, a Keeper of Secrets' cost (briefly
+                                 # 2600 / 550; the lord unit is 2000 / 400).
+                                 recruitment_cost=2000, multiplayer_cost=2000, upkeep_cost=500))
+add('unit_variants_tables', faction='', name=PRINCE, unit=PRINCE, variant=PRINCE_VARIANT, unit_card=PRINCE)
+for r in table(db, 'land_units_to_unit_abilites_junctions_tables'):
+    if r['land_unit'] == PRINCE_SRC:
+        add('land_units_to_unit_abilites_junctions_tables', **dict(r, land_unit=PRINCE))
+# 2026-11-26 (user): + Obsessive Adoration (Eternal Entourage), Feasting on Fear (Pleasureseekers), and
+# two bound spells as on regular units (2 uses each, no Winds cost): Okkam's Mindrazor (the Lahmian
+# Handmaidens' version) and The Enfeebling Foe (the Keeper of Secrets RoR's version). Fiendish Musk
+# (key ..._soporific_musk) comes with the lord unit. Blissful Rapture is a Lore of Slaanesh skill
+# of the lord, so this unit never had it.
+for ability in ['wh3_twa07_unit_passive_obsessive_adoration', 'wh3_main_unit_passive_feasting_on_fear',
+                'wh3_dlc29_spell_bound_okkams_mindrazor', 'wh3_twa08_spell_bound_enfeebling_foe_keeper_of_secrets_ror']:
+    add('land_units_to_unit_abilites_junctions_tables', ability=ability, land_unit=PRINCE, culture='*')
+loc[f'land_units_onscreen_name_{PRINCE}'] = 'Summoned Daemon Prince of Slaanesh'
+prince_row = next(r for r in allowed if r['building'] == 'wh2_main_def_pleasure_cult_4' and r['unit'] == DEVOTEES)
+add('building_units_allowed_tables', **dict(prince_row, building='wh2_main_def_pleasure_cult_5', unit=PRINCE,
+                                            faction=FACTION, enabled=True,
+                                            key=new_key('wh2_main_def_pleasure_cult_5' + PRINCE, taken)))
+add('units_to_groupings_military_permissions_tables', unit=PRINCE, military_group='wh3_main_def_morathi')
+# Daemonic: the rite's upkeep cut covers it like the other Daemonic units.
+add('unit_set_to_unit_junctions_tables', exclude=False, unit_caste='', unit_category='', unit_class='',
+    unit_record=PRINCE, unit_set=RITE_UPKEEP_SET)
+# Cap lines in the Temples of Excess bundle (the values are set by the script).
+CAP_S = 'druchii_cult_effect_unit_cap_seekers'
+CAP_P = 'druchii_cult_effect_unit_cap_daemon_prince'
+for effect, unit, name in [(CAP_S, SEEKERS, 'Seekers of Slaanesh'), (CAP_P, PRINCE, 'Summoned Daemon Prince of Slaanesh')]:
+    add('effects_tables', effect=effect, icon='unit_capacity.png', priority=1, icon_negative='unit_capacity.png',
+        category='campaign', is_positive_value_good=True)
+    add('effect_bonus_value_unit_record_junctions_tables', bonus_value_id='unit_cap', effect=effect, unit_record_key=unit)
+    loc[f'effects_description_{effect}'] = f'Unit capacity: %+n\n{name}'
+    add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=DEN_BUNDLE, effect_key=effect,
+        effect_scope='faction_to_faction_own', value=1.0, advancement_stage='start_turn_completed')
+# The army cap now counts Seekers too (Lua section 5).
+loc['campaign_localised_strings_string_druchii_cult_cancel_army'] = (
+    'This army can hold no more daemon units (Daemonettes, Exalted Daemonettes and Seekers of Slaanesh together).')
+ui_pack = Pack(DATA + r'\ui.pack')
+card_file = next(f for f in ui_pack.files if f.lower() == PRINCE_CARD_SRC)
+card_out = os.path.join(root, 'ui', 'units', 'icons', f'{PRINCE}.png')
+os.makedirs(os.path.dirname(card_out), exist_ok=True)
+open(card_out, 'wb').write(ui_pack.read(card_file))
+print('Summoned Daemon Prince of Slaanesh:', PRINCE, '(card', card_out, ')')
 
 # --------------------------------------------------------------------------
 # Write

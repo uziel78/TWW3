@@ -208,3 +208,26 @@ User mods Total War: Warhammer III with RPFM.
   Allies: N'Kari +1000 -> +600 gold per turn, Cult of Excess +600 too; Arathar's extra units now 3
   Darkshards (Shields) + 2 Reaper Bolt Throwers. The how-they-play popup override works (the loc file
   sorts before `event_feed_strings__.loc`).
+- Cult v25 (2026-11-26):
+  - N'Kari's extra starting units and +600 gold per turn removed (for a later N'Kari faction mod);
+    the alliance, relations bundles, trade agreement and Allegiance stay.
+  - Cult of Excess veterans on a new campaign: each unit in its armies gets a random rank 1-4
+    (`cm:add_experience_to_unit(unit, delta)`), lords and heroes level 6
+    (`cm:add_agent_experience(char, levels, true)`).
+  - Builder section 29: Summoned Daemon Prince of Slaanesh
+    (`druchii_cult_mon_daemon_prince_slaanesh_summoned`), a non-character copy of the custom-battle lord
+    unit `wh3_dlc20_chs_cha_daemon_prince_msla` (caste monster, class inf_mel like the Preyton, look 3,
+    the lord's 60x130 card picture copied to `ui/units/icons`). Pleasure Cult tier 5, Cult only.
+  - Lua caps: Seekers of Slaanesh 3 +1 per House of Pleasure (tier 3+), the Daemon Prince 1 per tier 5;
+    Seekers count in the 6 daemon units per army. Both caps are listed in the Temples of Excess bundle.
+  - The start-of-game "Dark Prince's Pact" popup is hidden (incident messages off for 2 seconds while
+    the Allegiance incidents are sent); the Allegiance still applies.
+  - CRASH (v24, new campaign, before Continue): Lua section 16 read the faction's mercenary pool for
+    its log (`faction:mercenary_pool()`), an engine crash. CA only reads pools through a province.
+    The read was removed; a line is logged before each pool call. v25 confirmed by the author: loads,
+    RoR list is the agreed one.
+- Cult v26 (2026-11-26): RoR batch 2 (own saved flag `druchii_cult_ror_pool_v2`, so existing
+  campaigns get it): Pleasure Guard, The Princes of Perfection, Riders of the Mighty Serpent, Eternal
+  Entourage. Daemon Prince: + Obsessive Adoration, Feasting on Fear, bound Okkam's Mindrazor (the
+  Lahmian Handmaidens' version) and The Enfeebling Foe (the Keeper of Secrets RoR's version), 2 uses
+  each; cost 2000 / upkeep 500 (a Keeper of Secrets'). Blissful Rapture is a lord skill, never on the unit.
