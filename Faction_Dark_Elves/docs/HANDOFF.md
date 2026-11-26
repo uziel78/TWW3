@@ -4,11 +4,14 @@ Last updated: 2026-11-26. Rewrite this file at the end of every session; history
 [MOD_HISTORY.md](MOD_HISTORY.md).
 
 ## State
-- **Druchii_Cult-of-Pleasure_MOD v29.** Confirmed in game: v25 loads, Regiments of Renown list as
-  agreed, the faction mechanics list (no Black Arks) and the pact popup is gone. Untested: RoR batch 2,
-  Summoned Daemon Prince (2000 / 500, bound spells), Seekers cap, Morathi's corruption sorcery (Lua
-  section 17), Kharibdyss removed (chain, exclusion, script lock), Morathi's Will line of sight (Lua
-  section 18).
+- **Druchii_Cult-of-Pleasure_MOD v29 + turn-1 crash fix (v29b).** Confirmed in game: a new campaign
+  loads and plays turn 1 with all three packs (2026-11-27); Regiments of Renown list as agreed, the
+  faction mechanics list (no Black Arks), the pact popup is gone. Untested: RoR batch 2, Summoned Daemon
+  Prince (2000 / 500, bound spells), Seekers cap, Morathi's corruption sorcery (Lua section 17; from
+  turn 2, or at a turn-1 battle), Kharibdyss removed (chain, exclusion, script lock), Morathi's Will
+  line of sight (Lua section 18; from turn 2).
+- **Script rule:** no character reads or changes during turn 1 except the first-tick setup itself (see
+  MOD_HISTORY, CRASH 9). New character features start on turn 2 (or at PendingBattle).
 - **Druchii_Morathi_MOD v12.** Her tree: Doombolt for Melkoth's Mystifying Miasma (own starting-spell
   dummy), Hysterical Frenzy for Doom & Darkness, own Blessed by Evil, own A Thousand & One Dark
   Blessings (barrier +222 / +444; her unit has 666 barrier), A Dark Dalliance daemons only (own effects),

@@ -2238,14 +2238,37 @@ core:add_listener("druchii_cult_morathi_sorcery_battle", "PendingBattle", true,
 		end
 	end, true)
 
+-- From turn 2 only: turn-1 FactionTurnStart fires during the load, after the starting Assassin was
+-- killed (CRASH LESSON: no character work there). On turn 1 the PendingBattle check applies it.
 core:add_listener("druchii_cult_morathi_sorcery_turn", "FactionTurnStart",
-	function(context) return context:faction():name() == FACTION_KEY end,
+	function(context) return cm:model():turn_number() >= 2 and context:faction():name() == FACTION_KEY end,
 	function()
 		pcall(update_morathi_sorcery, "turn start")
 	end, true)
 
+-- Turn check first, before touching the character (CRASH 8 lesson: a Character* listener reading the
+-- character on turn 1, after the first tick has killed the starting Assassin, crashes the game; the
+-- 2026-11-27 turn-1 crash had the same address). Turn 1 is covered by the load step and turn start.
+local function character_from(context)
+	if cm:model():turn_number() < 2 then
+		return nil
+	end
+	local ok, character = pcall(function() return context:character() end)
+	if ok and character and not character:is_null_interface() then
+		return character
+	end
+	return nil
+end
+
 core:add_listener("druchii_cult_morathi_sorcery_moved", "CharacterFinishedMoving",
-	function(context) return context:character():character_subtype(MORATHI_SUBTYPE) end,
+	function(context)
+		local character = character_from(context)
+		if not character then
+			return false
+		end
+		local ok, is_morathi = pcall(function() return character:character_subtype(MORATHI_SUBTYPE) end)
+		return ok and is_morathi
+	end,
 	function()
 		pcall(update_morathi_sorcery, "moved")
 	end, true)
@@ -2317,15 +2340,26 @@ local function update_all_will_sight()
 end
 
 core:add_listener("druchii_cult_will_sight_turn", "FactionTurnStart",
-	function(context) return context:faction():name() == FACTION_KEY end,
+	function(context) return cm:model():turn_number() >= 2 and context:faction():name() == FACTION_KEY end,
 	function() pcall(update_all_will_sight) end, true)
 
 core:add_listener("druchii_cult_will_sight_moved", "CharacterFinishedMoving",
 	function(context)
-		local character = context:character()
-		return character:faction():name() == FACTION_KEY and character:has_military_force()
+		local character = character_from(context)   -- nil on turn 1 (see section 17)
+		if not character then
+			return false
+		end
+		local ok, ours = pcall(function()
+			return character:faction():name() == FACTION_KEY and character:has_military_force()
+		end)
+		return ok and ours
 	end,
-	function(context) pcall(update_will_sight, context:character()) end, true)
+	function(context)
+		local character = character_from(context)
+		if character then
+			pcall(update_will_sight, character)
+		end
+	end, true)
 
 cm:add_first_tick_callback(function()
 	run_step("province_caps", update_province_caps)
@@ -2362,8 +2396,20 @@ cm:add_first_tick_callback(function()
 		end
 	end)
 	run_step("regiments_of_renown", setup_cult_ror)
-	run_step("morathi_sorcery", function() update_morathi_sorcery("load") end)
-	run_step("morathis_will_sight", update_all_will_sight)
+	-- Not on turn 1 (CRASH LESSON 2: no bundle on Morathi in the turn-1 load after the Assassin swap);
+	-- a turn-1 battle still gets it from the PendingBattle check.
+	run_step("morathi_sorcery", function()
+		if cm:model():turn_number() >= 2 then
+			update_morathi_sorcery("load")
+		end
+	end)
+	-- Not on turn 1 (reading every general during the turn-1 load, after the starting Assassin was
+	-- killed, is the CRASH LESSON pattern; nobody can have the rank-7 skill on turn 1 anyway).
+	run_step("morathis_will_sight", function()
+		if cm:model():turn_number() >= 2 then
+			update_all_will_sight()
+		end
+	end)
 	run_step("allied_host", function()
 		-- Base allied units per army 4 -> 6 (DB bundle, permanent).
 		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_allied_host") then

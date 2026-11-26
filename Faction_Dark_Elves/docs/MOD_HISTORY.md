@@ -258,3 +258,13 @@ User mods Total War: Warhammer III with RPFM.
   Daemonologist (was Slaughterlord; all daemons), Bound in Rapture, Morathi's Will (Snipe, range),
   Chosen of Excess (Fiendish Musk), Rapture of Blades. Own effects and unit sets, rows written into
   both the Morathi and the characters pack.
+- CRASH 9 (2026-11-27, logs `_test35_v29_turn1_crash`, `_test36_turn1_crash`): new campaign crashed on
+  turn 1 around the "Military Alliance negotiated" popup, the Cult log complete. Every dump had the
+  same address (Warhammer3.exe+0x1cba448) as CRASH 8 and the 2026-11-26 21:07 skill-screen crash:
+  character work during turn 1, after the first tick killed the starting Assassin. The new v27/v29 code
+  did that: CharacterFinishedMoving listeners reading context:character(), and the Morathi's sorcery /
+  Morathi's Will load steps and turn-1 FactionTurnStart listeners (bundle on Morathi, every general's
+  skills). Fix (v29b, confirmed by the author): `character_from(context)` returns nil on turn 1 (and
+  reads in pcall); the sorcery and line-of-sight steps run from turn 2; a turn-1 battle still gets
+  Morathi's bonus from the PendingBattle check. Tip: compare minidump exception offsets to match a
+  crash with a known cause.
