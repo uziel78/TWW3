@@ -293,6 +293,20 @@ for r in cult_sets:
         joined += 1
 print('Cult unit sets joined by the new units:', joined)
 
+# Pictures where no character exists yet (building browser "recruits" icons): the game uses the unit's
+# custom-battle portrait (units_custom_battle_permissions.general_portrait). Without a row it falls back
+# to the unit card (Cultist: "placeholder"; Sorceress: a card name with no image -> "?"). One row per
+# new unit, copied from vanilla, faction = the Cult (not a custom-battle faction, so the units don't
+# show up in custom battles).
+cb_rows = T('units_custom_battle_permissions_tables')
+for M in CHARACTER_MAPS:
+    for old, new in M.items():
+        src = [r for r in cb_rows if r['unit'] == old]
+        if src:
+            src.sort(key=lambda r: not r['faction'].startswith(('wh2_main_def', 'wh3_main_sla')))
+            add('units_custom_battle_permissions_tables', **dict(src[0], unit=new, faction=FACTION))
+print('custom-battle portrait rows:', len(out_tables.get('units_custom_battle_permissions_tables', [])))
+
 # Every renamed key that is used must also be defined (an orphan reference can crash the game).
 DEFINING = {'agent_subtypes_tables': 'key', 'main_units_tables': 'unit', 'land_units_tables': 'key',
             'ancillaries_tables': 'key', 'character_skills_tables': 'key', 'character_skill_nodes_tables': 'key',

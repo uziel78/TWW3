@@ -174,11 +174,25 @@ study of its pack; nothing copied). Patterns below are CA-style and reusable for
   `%APPDATA%\The Creative Assembly\Warhammer3\logs\modified.log` ("Mod:" lines) after every run.
 - **Overriding vanilla loc keys:** put them in a loc file whose name sorts before vanilla's
   (`text/db/<table>__.loc`), e.g. `text/db/!!<mod>_overrides.loc`. The first file defining a key
-  wins; an override in `text/db/Druchii_<mod>.loc` (sorts after `agent_culture_details__.loc`) had no
-  effect in game (2026-11-26). New keys can live in any loc file.
+  wins, compared case-insensitively: `text/db/Druchii_<mod>.loc` lost to `agent_culture_details__.loc`
+  (a < d) but beat `event_feed_strings__.loc` (d < e; the Cult's how-they-play text override works).
+  A `!!` name beats every vanilla file (2026-11-26). New keys can live in any loc file.
 - **Lore tabs in the lord recruitment list** come from **`agent_subtypes.magic_lore`** (lords only;
   heroes leave it empty), e.g. `wh2_main_lore_dark_magic`, `wh_main_lore_fire`,
   `wh3_main_lore_slaanesh`. Changing `main_units.ui_unit_group_land` (v6) or the unit's spell group
   `special_ability_groups_to_units_junctions.ability_group` (v8) did not move a copied lord out of the
   Dark Magic tab (2026-11-26). Set all three for a lore copy: magic_lore for the tab, the spell group
   for the battle spell bar, the UI group for unit grouping.
+- **Regiments of Renown pools come from the campaign's starting state, not the DB pool tables.** For
+  the Cult, neither `units_to_exclusive_faction_permissions` allowed=False nor moving the regiments'
+  `mercenary_pool_to_groups_junctions` rows to another pool changed the list in a new campaign
+  (2026-11-26). Change a faction's pool by script on the first tick:
+  `cm:add_unit_to_faction_mercenary_pool(faction, unit, "wh3_main_regiments_of_renown_pool", count,
+  replenish_chance, cap, max_per_turn, "", "", "", partial_replenishment, unit_group)` (CA's Imrik
+  dragon script; there is no remove function, so unwanted ones get count 0 / cap 0 plus an event
+  restriction lock). Untested result at the time of writing: see the Cult log's "RoR pool" lines.
+- **Character pictures where no character exists yet** (building browser "recruits" icons) come from
+  `units_custom_battle_permissions.general_portrait` of the unit; without a row the game shows the
+  unit card (the vanilla Cultist's is literally `placeholder`; a card name with no image shows "?").
+  A copied hero/lord unit needs a row; faction = the mod's own campaign faction keeps it out of
+  custom battles (2026-11-26).

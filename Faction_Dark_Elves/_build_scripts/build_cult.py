@@ -1297,7 +1297,12 @@ for u in CULT_ROR_ADDED:
         key=new_key(f'druchii_cult_ror_{u}', taken_pool_keys)))
     add('units_to_exclusive_faction_permissions_tables', key=u, faction=FACTION, allowed=True)
     add('units_to_groupings_military_permissions_tables', military_group='wh3_main_def_morathi', unit=u)
-print('Regiments of Renown: removed', len(CULT_ROR_REMOVED), 'added', len(CULT_ROR_ADDED))
+# v23 moved the removed regiments' pool rows to a second pool: no effect in a new campaign either (the
+# Cult's pool comes from the campaign's starting state), so it was taken out again in v24. The pool is
+# now set by the campaign script (Lua section 16); these rows only add the lock tooltip text.
+loc['campaign_localised_strings_string_druchii_cult_ror_not_for_cult'] = (
+    '[[col:red]]This regiment does not serve the Cult of Pleasure.[[/col]]')
+print('Regiments of Renown: removed', len(CULT_ROR_REMOVED), 'added', len(CULT_ROR_ADDED), '(pool set by script)')
 
 # --------------------------------------------------------------------------
 # 28. (Removed 2026-11-25.) v21 tried female Cultist art sets here (portrait file named with one

@@ -194,3 +194,17 @@ User mods Total War: Warhammer III with RPFM.
 - START-UP CRASHES (characters pack v2-v4): renamed group keys without group rows (v2/v3), then
   new rows in `main_unit_ownership_content_pack_junctions` (found by a cumulative table ladder, test
   2e). v5 loads; v9 confirmed by the author (lore tab, Priestess tab).
+- Characters pack v6-v10 (2026-11-26): v7 "Priestess" rename failed (vanilla-key loc override in a
+  file sorting after `agent_culture_details__.loc`), v8 moved it to `!!druchii_cult_characters_overrides.loc`
+  (confirmed). Lore tab: v6 (UI group) and v8 (spell group) had no effect; v9 sets
+  `agent_subtypes.magic_lore = wh3_main_lore_slaanesh` for the Supreme Sorceress (confirmed). Spells,
+  Cultist portraits confirmed by the author. v10: building browser showed "placeholder" (Cultist) and
+  "?" (Sorceress) -> `units_custom_battle_permissions` rows (general_portrait) for the 12 new units,
+  faction = the Cult. v6 also stopped copying the vanilla Warshrine Cultist unit (OWN_KEY rule).
+- Cult v23-v24 (2026-11-26): Regiments of Renown: v20's allowed=False rows and v23's pool move did
+  nothing in a new campaign (the faction's pool comes from the campaign's starting state). v24 reverts
+  v23; Lua section 16 sets the pool by script once per campaign (adds Scourge of Arden + Bringers of
+  Beguilement, zeroes the six removed ones) and event-locks the six on every load; logs the pool.
+  Allies: N'Kari +1000 -> +600 gold per turn, Cult of Excess +600 too; Arathar's extra units now 3
+  Darkshards (Shields) + 2 Reaper Bolt Throwers. The how-they-play popup override works (the loc file
+  sorts before `event_feed_strings__.loc`).

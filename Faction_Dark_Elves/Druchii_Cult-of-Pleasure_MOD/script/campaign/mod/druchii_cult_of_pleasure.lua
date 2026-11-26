@@ -34,7 +34,8 @@
 --     a magic item and followers; and the Sacrifice Slaves choice when an army enters Channelling.
 -- 13. Dreadspears have Guardian (bundle applied on load).
 -- 14. The Cult's Open Markets diktat: +600 gold when performed and at each of the next 5 turn starts.
--- 15. Hero panel: the Dark Elf hero group "Death Hag" reads "Cultist of Slaanesh" for the Cult.
+-- 15. Hero panel: the Dark Elf hero group "Death Hag" relabel (OFF: caused the turn-1 black screen).
+-- 16. Regiments of Renown: Cult pool set by script (two Slaanesh RoR added, six Dark Elf ones zeroed + locked).
 --
 -- Starting armies and heroes live in the campaign startpos, which can't be safely edited for
 -- Immortal Empires, so this is done by script, as Druchii_Naggarond_MOD does for Malekith.
@@ -166,12 +167,13 @@ end
 -- The Cult of Excess becomes the Cult's vassal (peace first, as CA's Hellebron/Nakai scripts do
 -- with force_make_vassal), with the same relations bonus both ways as the N'Kari pact.
 -- Arathar (the Cult of Excess faction leader, a Dreadlord) starts with a stronger army.
+-- (2026-11-26, author: was 2 Bleakswords, 1 Darkshards, 2 Dark Riders (Repeater Crossbows).)
 local EXCESS_EXTRA_UNITS = {
-	"wh2_main_def_inf_bleakswords_0",     -- Bleakswords x2
-	"wh2_main_def_inf_bleakswords_0",
-	"wh2_main_def_inf_darkshards_0",      -- Darkshards (no shields)
-	"wh2_main_def_cav_dark_riders_2",     -- Dark Riders (Repeater Crossbows) x2
-	"wh2_main_def_cav_dark_riders_2",
+	"wh2_main_def_inf_darkshards_1",          -- Darkshards (Shields) x3
+	"wh2_main_def_inf_darkshards_1",
+	"wh2_main_def_inf_darkshards_1",
+	"wh2_main_def_art_reaper_bolt_thrower",   -- Reaper Bolt Throwers x2
+	"wh2_main_def_art_reaper_bolt_thrower",
 }
 local ARMY_SIZE_MAX = 20
 
@@ -209,17 +211,23 @@ local function reinforce_faction_leader(faction_key, units, label)
 	log(label .. "'s army: +" .. added .. " units (was " .. size .. ")")
 end
 
--- N'Kari's extra income: +1000 gold at the start of each of his turns (cm:treasury_mod, as CA's
--- scripts add gold; the game has no faction-wide flat income effect).
-local NKARI_INCOME = 1000
+-- Allies' extra income at the start of each of their turns (cm:treasury_mod, as CA's scripts add
+-- gold; the game has no faction-wide flat income effect). 2026-11-26, author: N'Kari 1000 -> 600,
+-- and the Cult of Excess gets the same.
+local ALLY_INCOME = {
+	[NKARI_FACTION_KEY] = { gold = 600, label = "N'Kari" },
+	[EXCESS_FACTION_KEY] = { gold = 600, label = "Cult of Excess" },
+}
 core:add_listener("druchii_cult_nkari_income", "FactionTurnStart",
-	function(context) return context:faction():name() == NKARI_FACTION_KEY end,
-	function()
-		local ok, err = pcall(function() cm:treasury_mod(NKARI_FACTION_KEY, NKARI_INCOME) end)
+	function(context) return ALLY_INCOME[context:faction():name()] ~= nil end,
+	function(context)
+		local faction_key = context:faction():name()
+		local income = ALLY_INCOME[faction_key]
+		local ok, err = pcall(function() cm:treasury_mod(faction_key, income.gold) end)
 		if not ok then
-			log("ERROR adding N'Kari's income: " .. tostring(err))
+			log("ERROR adding " .. income.label .. "'s income: " .. tostring(err))
 		else
-			log("N'Kari +" .. NKARI_INCOME .. " gold")
+			log(income.label .. " +" .. income.gold .. " gold")
 		end
 	end, true)
 
@@ -1940,6 +1948,83 @@ core:add_listener("druchii_cult_relabel_click", "ComponentLClickUp",
 	end, true)
 end
 
+---------------------------------------------------------------------------
+-- 16. Regiments of Renown for the Cult (2026-11-26)
+---------------------------------------------------------------------------
+-- The Cult's RoR pool comes from the campaign's starting state, not from the DB pool tables
+-- (Cult v20 "allowed=False" rows and v23's moved pool rows changed nothing in a new campaign). So:
+--   - once per campaign: add Scourge of Arden + Bringers of Beguilement to the Cult's pool, and set
+--     the six unwanted ones to 0 units / cap 0 (CA's cm:add_unit_to_faction_mercenary_pool, the
+--     Imrik dragon script's call; there is no remove function);
+--   - every load: lock the six unwanted ones for the Cult (event restriction, tooltip), as a
+--     backstop if the pool still lists them.
+-- The pool is logged before and after the first change, to see what the game did.
+local ROR_SOURCE = "wh3_main_regiments_of_renown_pool"
+local ROR_REMOVED = {
+	"wh2_dlc10_def_inf_the_hellebronai_ror_0",
+	"wh2_dlc10_def_inf_sisters_of_the_singing_doom_ror_0",
+	"wh2_dlc10_def_inf_the_bolt_fiends_ror_0",
+	"wh2_dlc14_def_inf_harpies_ror_0",
+	"wh2_dlc10_def_cav_knights_of_the_ebon_claw_ror_0",
+	"wh2_dlc10_def_inf_blades_of_the_blood_queen_ror_0",
+}
+local ROR_ADDED = {
+	"wh3_dlc27_sla_mon_preyton_ror",        -- Scourge of Arden
+	"wh3_twa06_sla_inf_daemonette_ror_0",   -- Bringers of Beguilement
+}
+local ROR_TOOLTIP = "druchii_cult_ror_not_for_cult"
+local ROR_SAVE = "druchii_cult_ror_pool_v1"
+
+local function log_ror_pool(faction, when)
+	local ok, err = pcall(function()
+		local units = faction:mercenary_pool():mercenary_pool_units()
+		local keys = {}
+		for i = 0, units:num_items() - 1 do
+			local unit = units:item_at(i)
+			local key = unit:unit_record():key()
+			if string.find(key, "_ror", 1, true) then
+				local count = "?"
+				pcall(function() count = tostring(unit:count()) end)
+				keys[#keys + 1] = key .. "=" .. count
+			end
+		end
+		log("RoR pool " .. when .. " (" .. #keys .. "): " .. table.concat(keys, ", "))
+	end)
+	if not ok then
+		log("RoR pool " .. when .. ": couldn't read the faction pool (" .. tostring(err) .. ")")
+	end
+end
+
+local function setup_cult_ror()
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return
+	end
+	if not cm:get_saved_value(ROR_SAVE) then
+		log_ror_pool(faction, "before")
+		for _, unit_key in ipairs(ROR_ADDED) do
+			local ok, err = pcall(function()
+				cm:add_unit_to_faction_mercenary_pool(faction, unit_key, ROR_SOURCE, 1, 100, 1, 0.1, "", "", "", true, unit_key)
+			end)
+			log("RoR added " .. unit_key .. (ok and "" or (" FAILED: " .. tostring(err))))
+		end
+		for _, unit_key in ipairs(ROR_REMOVED) do
+			local ok, err = pcall(function()
+				cm:add_unit_to_faction_mercenary_pool(faction, unit_key, ROR_SOURCE, 0, 0, 0, 0, "", "", "", false, unit_key)
+			end)
+			log("RoR zeroed " .. unit_key .. (ok and "" or (" FAILED: " .. tostring(err))))
+		end
+		cm:set_saved_value(ROR_SAVE, true)
+		log_ror_pool(faction, "after")
+	end
+	for _, unit_key in ipairs(ROR_REMOVED) do
+		pcall(function()
+			cm:remove_event_restricted_unit_record_for_faction(unit_key, FACTION_KEY)
+			cm:add_event_restricted_unit_record_for_faction(unit_key, FACTION_KEY, ROR_TOOLTIP)
+		end)
+	end
+end
+
 cm:add_first_tick_callback(function()
 	run_step("province_caps", update_province_caps)
 	run_step("barracks", convert_all_barracks)
@@ -1971,6 +2056,7 @@ cm:add_first_tick_callback(function()
 			log("Pleasure Through Pain bundle applied")
 		end
 	end)
+	run_step("regiments_of_renown", setup_cult_ror)
 	run_step("allied_host", function()
 		-- Base allied units per army 4 -> 6 (DB bundle, permanent).
 		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_allied_host") then
