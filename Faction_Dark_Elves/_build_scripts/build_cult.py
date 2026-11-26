@@ -391,6 +391,12 @@ EXCLUSION_SET = 'druchii_cult_exclusions'
 add('factionwide_recruitment_unit_exclusions_sets_tables', set=EXCLUSION_SET)
 add('factionwide_recruitment_unit_exclusions_units_sets_junctions_tables', set=EXCLUSION_SET,
     unit='wh2_main_def_inf_har_ganeth_executioners_0')
+# Kharibdyss (user 2026-11-26): out of the Cult's roster (also dropped from its Beastmasters chain, and
+# locked by the campaign script like the Executioners).
+add('factionwide_recruitment_unit_exclusions_units_sets_junctions_tables', set=EXCLUSION_SET,
+    unit='wh2_dlc10_def_mon_kharibdyss_0')
+loc['campaign_localised_strings_string_druchii_cult_no_kharibdyss'] = (
+    '[[col:red]]The Cult of Pleasure does not keep Kharibdysses.[[/col]]')
 add('faction_factionwide_recruitment_unit_exclusions_set_junctions_tables', faction=FACTION, set=EXCLUSION_SET)
 loc['campaign_localised_strings_string_druchii_cult_no_executioners'] = (
     '[[col:red]]The Cult of Pleasure does not raise Executioners.[[/col]]')
@@ -705,6 +711,25 @@ shared = loc_vanilla['ui_text_replacements_localised_text_how_they_play_dark_elv
 paragraphs = [p for p in shared.split('\n\n') if 'black_ark' not in p.lower()]
 assert len(paragraphs) == len(shared.split('\n\n')) - 1, 'expected exactly one Black Ark paragraph'
 loc[HTP_KEY] = '{{tr:how_they_play_dark_elves_morathi}}' + '\n\n'.join(paragraphs)
+
+# The faction's mechanics list (faction-select screen and the campaign loading screen; user
+# 2026-11-26): vanilla lists Black Arks, Slaves and Murderous Prowess. The Cult's own version: no
+# Black Arks, limited Druchii levies filled out with daemons and allied units, stronger sorcery and
+# the Sacrifice to Slaanesh rite, the pact with N'Kari and the Cult of Excess, agents abroad. Same
+# "[[img:bullet_...]][[/img]]Title: text" items joined by "||" as CA's; icons are CA's bullets. The
+# file sorts before frontend_factions__.loc, so the vanilla key is overridden from this loc file.
+loc['frontend_factions_localised_mechanics_wh2_main_def_cult_of_pleasure'] = '||'.join([
+    "[[img:bullet_sla_promise_of_perfection]][[/img]]Cult of the Dark Prince: No Black Arks sail for Morathi. "
+    "Her power lies in the temples of Slaanesh, which spread corruption and draw daemons to the Cult.",
+    "[[img:bullet_sla_summon_disciple_armies]][[/img]]Daemons and Allies: Druchii regiments are levied in limited "
+    "numbers. Fill your hosts with Daemons of Slaanesh, the Devoted and the warriors of your allies.",
+    "[[img:bullet_tze_grimoires]][[/img]]Sorcery of Excess: The Cult's sorceresses wield potent magic, and the "
+    "Sacrifice to Slaanesh rite pours the Dark Prince's favour into your armies.",
+    "[[img:bullet_dae_daemonic_gifts]][[/img]]Pact of Pleasure: Begin allied with N'Kari and the Seducers of "
+    "Slaanesh, with the Cult of Excess sworn to you as vassals.",
+    "[[img:bullet_hef_espionage]][[/img]]Agents Abroad: Morathi's servants already walk distant lands, from the "
+    "towers of Saphery to the shadows of Ghrond.",
+])
 
 # --------------------------------------------------------------------------
 # 16. No Dreadlords (Sword & Crossbow, and the female Sword & Shield) as Cult lords
@@ -1151,6 +1176,8 @@ def cult_chain_copy(vanilla, cult, garrison_swap=None, unit_swap=None, names=Non
             break
         if r['building'].startswith(vanilla + '_') and not r['faction']:
             building, unit = rc(r['building']), (unit_swap or {}).get(r['unit'], r['unit'])
+            if unit is None:                      # unit_swap value None: dropped from the Cult's chain
+                continue
             if (building, unit) not in seen:      # CA lists a few units twice on one level
                 seen.add((building, unit))
                 add('building_units_allowed_tables', **dict(r, building=building, unit=unit, key=new_key(building + unit, taken)))
@@ -1200,7 +1227,9 @@ cult_chain_copy('wh2_main_def_defence_major', 'druchii_cult_defence_major',
                 garrison_swap={'wh2_main_def_inf_shades_0': 'wh3_dlc27_sla_inf_devotees_of_slaanesh',
                                'wh2_main_def_inf_shades_1': 'wh3_dlc27_sla_inf_devotees_of_slaanesh_crossbows'})
 cult_chain_copy('wh2_main_def_beasts', 'druchii_cult_beasts',
-                unit_swap={'wh2_main_def_inf_harpies': FURIES, 'wh2_main_def_mon_black_dragon': PREYTON},
+                # Kharibdyss dropped (user 2026-11-26: not in the Cult's roster; also excluded, section 8).
+                unit_swap={'wh2_main_def_inf_harpies': FURIES, 'wh2_main_def_mon_black_dragon': PREYTON,
+                           'wh2_dlc10_def_mon_kharibdyss_0': None},
                 names={'druchii_cult_beasts_1': "Furies' Roost", 'druchii_cult_beasts_3': "Preyton's Pen"},
                 short_texts={
                     'druchii_cult_beasts_1': "Daemonic Furies of the Dark Prince gather to roost above the Cult's temples.",
@@ -1381,6 +1410,63 @@ card_out = os.path.join(root, 'ui', 'units', 'icons', f'{PRINCE}.png')
 os.makedirs(os.path.dirname(card_out), exist_ok=True)
 open(card_out, 'wb').write(ui_pack.read(card_file))
 print('Summoned Daemon Prince of Slaanesh:', PRINCE, '(card', card_out, ')')
+
+# --------------------------------------------------------------------------
+# 30. Morathi's sorcery grows with Slaanesh corruption (user 2026-11-26)
+# --------------------------------------------------------------------------
+# A character bundle on Morathi whose values the campaign script sets (Lua section 17) to half the
+# Slaanesh corruption of the region she's in: spell targeting range %, spell intensity % and barrier
+# hit points %. Refreshed at turn start, after she moves and at every PendingBattle she's in (then
+# cm:update_pending_battle(), as CA's chaos invasion script does after changing effects there).
+# Own effects, because CA's "all spells" targeting-range effect lists every lore group except
+# Morathi's own (wh2_main_lore_morathi). The barrier effect uses battle_barrier_health_mod (CA defines
+# it but never uses it, so whether it's a percentage is unproven; Morathi has no barrier now).
+M_RANGE = 'druchii_cult_effect_morathi_spell_range'
+M_INTENSITY = 'druchii_cult_effect_morathi_spell_intensity'
+M_BARRIER = 'druchii_cult_effect_morathi_barrier'
+M_BUNDLE = 'druchii_cult_morathi_corruption_sorcery'
+effects_by_key = {r['effect']: r for r in table(db, 'effects_tables')}
+add('effects_tables', **dict(effects_by_key['wh3_main_effect_spell_targeting_range_all'], effect=M_RANGE))
+add('effects_tables', **dict(effects_by_key['wh3_main_effect_spell_mastery'], effect=M_INTENSITY))
+add('effects_tables', **dict(effects_by_key['wh3_dlc27_effect_force_stat_barrier'], effect=M_BARRIER))
+range_groups = {r['special_ability_group'] for r in table(db, 'effect_bonus_value_special_ability_group_junctions_tables')
+                if r['effect'] == 'wh3_main_effect_spell_targeting_range_all'} | {'wh2_main_lore_morathi'}
+for group in sorted(range_groups):
+    add('effect_bonus_value_special_ability_group_junctions_tables', bonus_value_id='target_intercept_range_mod',
+        effect=M_RANGE, special_ability_group=group)
+add('effect_bonus_value_basic_junction_tables', effect=M_INTENSITY, bonus_value_id='spell_mastery_percentage_mod')
+add('effect_bonus_value_basic_junction_tables', effect=M_BARRIER, bonus_value_id='battle_barrier_health_mod')
+loc[f'effects_description_{M_RANGE}'] = 'Targeting range: %+n% for spells (Slaanesh corruption)'
+loc[f'effects_description_{M_INTENSITY}'] = 'Spell intensity: %+n% (Slaanesh corruption)'
+loc[f'effects_description_{M_BARRIER}'] = 'Barrier hit points: %+n% (Slaanesh corruption)'
+char_bundle_template = next(r for r in table(db, 'effect_bundles_tables')
+                            if r['key'] == 'wh2_dlc09_bundle_anc_magic_standard_banner_of_the_hidden_dead')
+add('effect_bundles_tables', **dict(char_bundle_template, key=M_BUNDLE, localised_title='Sorcery of Excess',
+                                     localised_description='', ui_icon='slaanesh_points.png'))
+loc[f'effect_bundles_localised_title_{M_BUNDLE}'] = 'Sorcery of Excess'
+loc[f'effect_bundles_localised_description_{M_BUNDLE}'] = (
+    "The more the land surrenders to the Dark Prince, the further and fiercer Morathi's sorcery reaches.")
+for effect in (M_RANGE, M_INTENSITY, M_BARRIER):
+    add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=M_BUNDLE, effect_key=effect,
+        effect_scope='character_to_character_own', value=0.0, advancement_stage='start_turn_completed')
+print("Morathi's corruption sorcery:", len(range_groups), 'lore groups for the range effect')
+
+# --------------------------------------------------------------------------
+# 31. Morathi's Will: campaign line of sight per unit (user 2026-11-26)
+# --------------------------------------------------------------------------
+# The red-line skill Morathi's Will (cult_army_skills.py, in the Morathi and characters packs) shows a
+# text line; the bonus itself is this character bundle, which the campaign script (Lua section 18) keeps
+# on every Cult general with that skill: +6% campaign line of sight per Morathi's Will unit in the army,
+# up to +100% (an army sees as far as its general; CA's character line-of-sight effect).
+WILL_SIGHT_BUNDLE = 'druchii_cult_morathis_will_sight'
+add('effect_bundles_tables', **dict(char_bundle_template, key=WILL_SIGHT_BUNDLE, localised_title="Morathi's Will",
+                                     localised_description='', ui_icon='agent.png'))
+loc[f'effect_bundles_localised_title_{WILL_SIGHT_BUNDLE}'] = "Morathi's Will"
+loc[f'effect_bundles_localised_description_{WILL_SIGHT_BUNDLE}'] = (
+    "Morathi's scouts and raiders range far ahead of the host.")
+add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=WILL_SIGHT_BUNDLE,
+    effect_key='wh_main_effect_agent_field_line_of_sight_mod', effect_scope='character_to_character_own', value=0.0,
+    advancement_stage='start_turn_completed')
 
 # --------------------------------------------------------------------------
 # Write

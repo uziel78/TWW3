@@ -231,3 +231,30 @@ User mods Total War: Warhammer III with RPFM.
   Entourage. Daemon Prince: + Obsessive Adoration, Feasting on Fear, bound Okkam's Mindrazor (the
   Lahmian Handmaidens' version) and The Enfeebling Foe (the Keeper of Secrets RoR's version), 2 uses
   each; cost 2000 / upkeep 500 (a Keeper of Secrets'). Blissful Rapture is a lord skill, never on the unit.
+- Cult v27 / Morathi v3 (2026-11-26): Morathi's +20 growth removed; her sorcery grows with Slaanesh
+  corruption (builder section 30, Lua section 17): a character bundle with spell targeting range, spell
+  intensity and barrier, each +(half the region's corruption)%, refreshed on load, turn start, after she
+  moves and at PendingBattle (+ `cm:update_pending_battle()`, CA's pattern). Own range effect, because
+  CA's "all spells" one misses `wh2_main_lore_morathi`. Faction mechanics list rewritten (no Black Arks).
+- Morathi v4-v12 (2026-11-26): skill-tree overrides by node key (vanilla rows can't be deleted, so
+  changed skills are Morathi-only copies): Doombolt (own starting-spell dummy; the vanilla one is
+  shared with Drycha), Hysterical Frenzy (both added to her spell group), Blessed by Evil, A Thousand &
+  One Dark Blessings (barrier; her unit 666 barrier), Student of the Dark Tower (top line: no character
+  has a real 7th line), Gates of Slaanesh, A Dark Dalliance daemons only (own effects; the Summoned
+  Daemon Prince left out to avoid a cross-pack reference), Intoxicating Allure (own copy of N'Kari's
+  Harvester of Souls: upgraded rows, base phase 0.4%). Cult red line via `cult_army_skills.py`.
+- Characters v11-v16 (2026-11-26): faction node sets (faction_key = the Cult, CA's method as for
+  Avelorn's Handmaidens) for every vanilla Sorceress / Supreme Sorceress lore and the High Beastmaster.
+  Mount removals, Gate of Slaanesh (one-level copy for heroes), Student moved to the top line,
+  Soporific Musk and Veil of Excess for Supreme Sorceresses, red line swapped in every Cult lord tree.
+  Cultist: Mistress of Debauchery (growth), Maintain Slave Stock (slaves; "..._unseen" effect scopes are
+  hidden in tooltips, so a display-only line shows the number), own agent-action dummy without
+  Establish Cult, Dechala's node dropped. The warshrine mount is CA's unit, left as is.
+- Cult v28-v29 (2026-11-26): Kharibdyss out of the Cult roster (`cult_chain_copy` unit_swap None,
+  exclusion set, script lock). Morathi's Will line of sight (builder section 31, Lua section 18): +6%
+  campaign line of sight per Morathi's Will unit, up to +100%, on generals with the skill.
+- Cult red line (`_build_scripts/cult_army_skills.py`, 2026-11-26): Line Breaker, Sheafmaster, Lash
+  Master, Raid Leader (+ Riders of the Mighty Serpent), Champion of Excess (was Knight Lord),
+  Daemonologist (was Slaughterlord; all daemons), Bound in Rapture, Morathi's Will (Snipe, range),
+  Chosen of Excess (Fiendish Musk), Rapture of Blades. Own effects and unit sets, rows written into
+  both the Morathi and the characters pack.

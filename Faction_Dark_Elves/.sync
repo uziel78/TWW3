@@ -5,5 +5,5 @@ MASTERS_SUBDIR="warhammer_3"
 MOD_GLOBS="Druchii_*"
 # Dark Elf entries of the masters' shared _build_scripts (add new Druchii builders here).
 # twpack.py, build_pack.py and make_loc_cache.py are the shared pack tools (mastered here).
-BUILD_GLOBS="build_bg.py build_black_council.py build_cult.py build_cult_characters.py build_malekith.py build_morathi.py
+BUILD_GLOBS="build_bg.py build_black_council.py build_cult.py build_cult_characters.py cult_army_skills.py build_malekith.py build_morathi.py
   build_naggarond_data.py build_units.py build_pack.py twpack.py make_loc_cache.py malekith_*"

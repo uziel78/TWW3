@@ -39,7 +39,11 @@
 -- 13. Dreadspears have Guardian (bundle applied on load).
 -- 14. The Cult's Open Markets diktat: +600 gold when performed and at each of the next 5 turn starts.
 -- 15. Hero panel: the Dark Elf hero group "Death Hag" relabel (OFF: caused the turn-1 black screen).
--- 16. Regiments of Renown: Cult pool set by script (two Slaanesh RoR added, six Dark Elf ones zeroed + locked).
+-- 16. Regiments of Renown: Cult pool set by script (Slaanesh RoR added, six Dark Elf ones zeroed + locked).
+-- 17. Morathi: spell range, intensity and barrier +(half the region's Slaanesh corruption)%, checked
+--     before every battle she's in.
+-- 18. Morathi's Will (red-line skill): +6% campaign line of sight per Morathi's Will unit in the
+--     general's army, up to +100%.
 --
 -- Starting armies and heroes live in the campaign startpos, which can't be safely edited for
 -- Immortal Empires, so this is done by script, as Druchii_Naggarond_MOD does for Malekith.
@@ -2140,6 +2144,189 @@ local function setup_cult_ror()
 	log("RoR setup done")
 end
 
+---------------------------------------------------------------------------
+-- 17. Morathi's sorcery grows with Slaanesh corruption (2026-11-26, author)
+---------------------------------------------------------------------------
+-- Morathi carries a custom bundle (builder section 30): spell targeting range, spell intensity and
+-- barrier hit points, each +(half the Slaanesh corruption of the region she's in)%, so 100
+-- corruption = +50%. Set on load, at the Cult's turn start, after she moves, and at every
+-- PendingBattle (fires before any battle: attacks, ambushes, sieges, reinforcing). If she's in that
+-- battle and the value changed, cm:update_pending_battle() makes the battle use the new value (as
+-- CA's chaos invasion script does after changing effects at PendingBattle). No region (at sea):
+-- 0 corruption. The value isn't saved; it's recomputed on load.
+local MORATHI_SORCERY_BUNDLE = "druchii_cult_morathi_corruption_sorcery"
+local SLAANESH_CORRUPTION = "wh3_main_corruption_slaanesh"
+local morathi_sorcery_value = nil
+
+local function slaanesh_corruption_at(character)
+	if not character:has_region() then
+		return 0
+	end
+	local ok, value = pcall(function()
+		return cm:get_corruption_value_in_region(character:region(), SLAANESH_CORRUPTION)
+	end)
+	if ok and type(value) == "number" then
+		return value
+	end
+	return 0
+end
+
+-- Returns Morathi (or nil) and whether the bundle's value changed.
+local function update_morathi_sorcery(reason)
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return nil, false
+	end
+	local morathi = find_morathi(faction)
+	if not morathi then
+		return nil, false
+	end
+	local corruption = slaanesh_corruption_at(morathi)
+	local value = math.floor(corruption / 2)
+	if value == morathi_sorcery_value and morathi:has_effect_bundle(MORATHI_SORCERY_BUNDLE) then
+		return morathi, false
+	end
+	cm:remove_effect_bundle_from_character(MORATHI_SORCERY_BUNDLE, morathi)
+	local bundle = cm:create_new_custom_effect_bundle(MORATHI_SORCERY_BUNDLE)
+	local effects = bundle:effects()
+	for i = 0, effects:num_items() - 1 do
+		bundle:set_effect_value(effects:item_at(i), value)
+	end
+	bundle:set_duration(0)
+	cm:apply_custom_effect_bundle_to_character(bundle, morathi)
+	morathi_sorcery_value = value
+	log("Morathi's sorcery (" .. reason .. "): Slaanesh corruption " .. tostring(corruption) .. " -> spell range, intensity, barrier +"
+		.. value .. "%")
+	return morathi, true
+end
+
+-- Is this character in the pending battle (main or secondary attacker / defender)?
+local function in_pending_battle(character)
+	local cqi = character:command_queue_index()
+	local found = false
+	local function is_her(char)
+		if char and not char:is_null_interface() and char:command_queue_index() == cqi then
+			found = true
+		end
+	end
+	pcall(function()
+		local pb = cm:model():pending_battle()
+		if pb:has_attacker() then is_her(pb:attacker()) end
+		if pb:has_defender() then is_her(pb:defender()) end
+		for _, list in ipairs({ pb:secondary_attackers(), pb:secondary_defenders() }) do
+			for i = 0, list:num_items() - 1 do
+				is_her(list:item_at(i))
+			end
+		end
+	end)
+	return found
+end
+
+core:add_listener("druchii_cult_morathi_sorcery_battle", "PendingBattle", true,
+	function()
+		local ok, err = pcall(function()
+			local morathi, changed = update_morathi_sorcery("before a battle")
+			if morathi and in_pending_battle(morathi) then
+				log("Morathi is in the pending battle (+" .. tostring(morathi_sorcery_value) .. "%)")
+				if changed then
+					cm:update_pending_battle()
+				end
+			end
+		end)
+		if not ok then
+			log("ERROR in Morathi's sorcery battle check: " .. tostring(err))
+		end
+	end, true)
+
+core:add_listener("druchii_cult_morathi_sorcery_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY end,
+	function()
+		pcall(update_morathi_sorcery, "turn start")
+	end, true)
+
+core:add_listener("druchii_cult_morathi_sorcery_moved", "CharacterFinishedMoving",
+	function(context) return context:character():character_subtype(MORATHI_SUBTYPE) end,
+	function()
+		pcall(update_morathi_sorcery, "moved")
+	end, true)
+
+---------------------------------------------------------------------------
+-- 18. Morathi's Will: campaign line of sight per unit (2026-11-26, author)
+---------------------------------------------------------------------------
+-- A Cult general with the red-line skill Morathi's Will gets +6% campaign line of sight for each
+-- Morathi's Will unit in the army, up to +100% (custom character bundle, builder section 31). Recounted
+-- on load, at the Cult's turn start and when a Cult general finishes moving (merges, recruits and
+-- losses show up there). The unit list matches cult_army_skills.py (SET_WILL).
+local WILL_SKILL = "druchii_cult_skill_def_army_buff_morathis_will"
+local WILL_SIGHT_BUNDLE = "druchii_cult_morathis_will_sight"
+local WILL_PER_UNIT, WILL_MAX = 6, 100
+local WILL_UNITS = {
+	wh2_main_def_cav_dark_riders_0 = true, wh2_main_def_cav_dark_riders_1 = true, wh2_main_def_cav_dark_riders_2 = true,
+	wh2_main_def_inf_shades_0 = true, wh2_main_def_inf_shades_1 = true, wh2_main_def_inf_shades_2 = true,
+	wh2_dlc10_def_cav_doomfire_warlocks_0 = true, wh2_dlc14_def_cav_scourgerunner_chariot_0 = true,
+	wh2_dlc10_def_cav_raven_heralds_ror_0 = true, wh2_dlc10_def_cav_slaanesh_harvesters_ror_0 = true,
+	wh2_dlc14_def_cav_scourgerunner_chariot_ror_0 = true, wh3_dlc27_nor_cav_marauder_horsemen_ror = true,
+}
+local will_values = {}   -- general cqi -> value last applied (not saved; recomputed on load)
+
+local function update_will_sight(general)
+	local cqi = general:command_queue_index()
+	local value = 0
+	if general:has_skill(WILL_SKILL) and general:has_military_force() and not general:military_force():is_armed_citizenry() then
+		local units = general:military_force():unit_list()
+		local count = 0
+		for i = 0, units:num_items() - 1 do
+			if WILL_UNITS[units:item_at(i):unit_key()] then
+				count = count + 1
+			end
+		end
+		value = math.min(count * WILL_PER_UNIT, WILL_MAX)
+	end
+	local has_bundle = general:has_effect_bundle(WILL_SIGHT_BUNDLE)
+	if value == (will_values[cqi] or 0) and (has_bundle == (value > 0)) then
+		return
+	end
+	if has_bundle then
+		cm:remove_effect_bundle_from_character(WILL_SIGHT_BUNDLE, general)
+	end
+	if value > 0 then
+		local bundle = cm:create_new_custom_effect_bundle(WILL_SIGHT_BUNDLE)
+		local effects = bundle:effects()
+		for i = 0, effects:num_items() - 1 do
+			bundle:set_effect_value(effects:item_at(i), value)
+		end
+		bundle:set_duration(0)
+		cm:apply_custom_effect_bundle_to_character(bundle, general)
+	end
+	will_values[cqi] = value
+	log("Morathi's Will: " .. general:character_subtype_key() .. " (cqi " .. cqi .. ") line of sight +" .. value .. "%")
+end
+
+local function update_all_will_sight()
+	local faction = cm:get_faction(FACTION_KEY)
+	if not faction or faction:is_null_interface() or faction:is_dead() then
+		return
+	end
+	local forces = faction:military_force_list()
+	for i = 0, forces:num_items() - 1 do
+		local force = forces:item_at(i)
+		if force:has_general() and not force:is_armed_citizenry() then
+			pcall(update_will_sight, force:general_character())
+		end
+	end
+end
+
+core:add_listener("druchii_cult_will_sight_turn", "FactionTurnStart",
+	function(context) return context:faction():name() == FACTION_KEY end,
+	function() pcall(update_all_will_sight) end, true)
+
+core:add_listener("druchii_cult_will_sight_moved", "CharacterFinishedMoving",
+	function(context)
+		local character = context:character()
+		return character:faction():name() == FACTION_KEY and character:has_military_force()
+	end,
+	function(context) pcall(update_will_sight, context:character()) end, true)
+
 cm:add_first_tick_callback(function()
 	run_step("province_caps", update_province_caps)
 	run_step("barracks", convert_all_barracks)
@@ -2147,6 +2334,9 @@ cm:add_first_tick_callback(function()
 		-- Har Ganeth Executioners are never recruitable by the Cult (also excluded in the DB).
 		cm:add_event_restricted_unit_record_for_faction("wh2_main_def_inf_har_ganeth_executioners_0", FACTION_KEY,
 			"druchii_cult_no_executioners")
+		-- No Kharibdyss either (2026-11-26, author; also out of the Cult's Beastmasters chain).
+		cm:add_event_restricted_unit_record_for_faction("wh2_dlc10_def_mon_kharibdyss_0", FACTION_KEY,
+			"druchii_cult_no_kharibdyss")
 	end)
 	run_step("mark_of_slaanesh", function()
 		-- The Mark's attributes/stats, applied to the faction (kept out of the faction bundle so the
@@ -2172,6 +2362,8 @@ cm:add_first_tick_callback(function()
 		end
 	end)
 	run_step("regiments_of_renown", setup_cult_ror)
+	run_step("morathi_sorcery", function() update_morathi_sorcery("load") end)
+	run_step("morathis_will_sight", update_all_will_sight)
 	run_step("allied_host", function()
 		-- Base allied units per army 4 -> 6 (DB bundle, permanent).
 		if not cm:get_faction(FACTION_KEY):has_effect_bundle("druchii_cult_allied_host") then

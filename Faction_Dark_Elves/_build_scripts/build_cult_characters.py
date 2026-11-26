@@ -279,6 +279,226 @@ assert any(r['effect'] == 'wh3_main_effect_agent_enable_recruitment_sla_cultist'
            for r in out_tables['effect_bonus_value_agent_subtype_junctions_tables']), 'recruitment link not copied'
 CHARACTER_MAPS = (M_SORC, M_SUPREME, M_CULTIST)
 
+# --------------------------------------------------------------------------
+# 5. Cult skill trees (user 2026-11-26)
+# --------------------------------------------------------------------------
+# Sorceresses (every lore): no Cold One mount; a one-level Gate of Slaanesh (one use per battle) at
+# the end of the top line. Supreme Sorceresses (every lore): no Cold One or Manticore mount; Student
+# of the Dark Tower moved from their third line to the top line, then Gate of Slaanesh (all levels).
+# The vanilla lores are shared with every Dark Elf faction, so the Cult gets its own trees: a node set
+# per subtype with faction_key = the Cult (CA's method, e.g. Avelorn's own Handmaiden tree; a faction
+# set replaces the general one). The Slaanesh copies (sections 1-2) are Cult-only already and are
+# changed in place.
+# Cultist of Slaanesh: Mistress of Disciples -> Mistress of Debauchery (Disciple Army budget, a
+# Slaanesh-faction feature, replaced by +10 growth in her province); Establish Cult (skill and the
+# agent action, a Slaanesh-faction feature) -> Maintain Slave Stock (+6 / +12 / +18 slaves per turn);
+# Dechala's faction-only node dropped. Her Chaos Warshrine mount is the vanilla Champions of Chaos
+# unit (generic auras, nothing Chaos-faction-specific), so it's left as is.
+GATE = 'wh3_main_skill_sla_cultist_unique_gate_of_slaanesh'
+GATE_SINGLE = 'druchii_cult_skill_gate_of_slaanesh_single'
+STUDENT = 'wh2_twa03_skill_supreme_sorceress_unique_1'
+SKILL_TABLES = {   # table: column holding the skill key
+    'character_skills_tables': 'key', 'character_skill_level_details_tables': 'skill_key',
+    'character_skill_level_to_effects_junctions_tables': 'character_skill_key',
+    'character_skill_utilization_hints_junctions_tables': 'key',
+}
+
+
+def new_skill(src, new, name=None, description=None, levels=None, drop=(), extra=(), image=None):
+    """A copy of a vanilla skill: only `levels` (all if None), minus effects in `drop`, plus `extra`
+    (level, effect, scope, value) rows."""
+    for t, col in SKILL_TABLES.items():
+        for r in T(t):
+            if r[col] != src:
+                continue
+            if levels is not None and 'level' in r and r['level'] not in levels:
+                continue
+            if t == 'character_skill_level_to_effects_junctions_tables' and r['effect_key'] in drop:
+                continue
+            row = dict(r, **{col: new})
+            if t == 'character_skills_tables' and image:
+                row['image_path'] = image
+            add(t, **row)
+    for level, effect, scope, value in extra:
+        add('character_skill_level_to_effects_junctions_tables', character_skill_key=new, effect_key=effect,
+            effect_scope=scope, level=level, value=value)
+    loc[f'character_skills_localised_name_{new}'] = name or loc_vanilla.get(f'character_skills_localised_name_{src}', '')
+    loc[f'character_skills_localised_description_{new}'] = description or loc_vanilla.get(
+        f'character_skills_localised_description_{src}', '')
+
+
+new_skill(GATE, GATE_SINGLE, levels={1})
+
+
+def drop_rows(table_name, pred):
+    out_tables[table_name] = [r for r in out_tables.get(table_name, []) if not pred(r)]
+
+
+def set_nodes(set_key):
+    """The node rows (in out_tables, so edits stick) of one of our node sets."""
+    keys = {r['item'] for r in out_tables['character_skill_node_set_items_tables'] if r['set'] == set_key}
+    return [r for r in out_tables['character_skill_nodes_tables'] if r['key'] in keys]
+
+
+def remove_nodes(set_key, keys):
+    drop_rows('character_skill_nodes_tables', lambda r: r['key'] in keys)
+    drop_rows('character_skill_node_set_items_tables', lambda r: r['set'] == set_key and r['item'] in keys)
+    drop_rows('character_skill_node_links_tables', lambda r: r['parent_key'] in keys or r['child_key'] in keys)
+    drop_rows('character_skill_nodes_skill_locks_tables', lambda r: r['character_skill_node'] in keys)
+    drop_rows('character_skill_node_ancillary_locks_tables', lambda r: r['character_skill_node'] in keys)
+
+
+def add_node(set_key, key, skill, indent, tier):
+    add('character_skill_nodes_tables', campaign_key='', character_skill_key=skill, faction_key='', indent=indent,
+        key=key, tier=tier, subculture='', points_on_creation=0, required_num_parents=0, visible_in_ui=True)
+    add('character_skill_node_set_items_tables', set=set_key, item=key, mod_disabled=False)
+
+
+def rework_sorceress_tree(set_key, lord):
+    nodes = set_nodes(set_key)
+    mounts = ('_mount_cold_one', '_mount_manticore') if lord else ('_mount_cold_one',)
+    gone = {n['key'] for n in nodes if n['character_skill_key'].endswith(mounts)}
+    assert len(gone) == len(mounts), (set_key, gone)
+    remove_nodes(set_key, gone)
+    nodes = [n for n in nodes if n['key'] not in gone]
+    top = sorted([n for n in nodes if n['indent'] == 0 and n['tier'] < 28], key=lambda n: n['tier'])
+    if lord:
+        student = [n for n in nodes if n['character_skill_key'] == STUDENT]
+        assert len(student) == 1, set_key
+        student[0]['indent'] = 0
+        top.append(student[0])
+    for tier, n in enumerate(top):
+        n['tier'] = tier
+    add_node(set_key, f'{set_key}__gate_of_slaanesh', GATE if lord else GATE_SINGLE, 0, len(top))
+
+
+# Cult-only trees for vanilla subtypes.
+VANILLA_SETS = {r['agent_subtype_key']: r for r in T('character_skill_node_sets_tables') if not r['faction_key']}
+
+
+def cult_tree_copy(subtype):
+    """A full copy of a vanilla subtype's tree as a Cult-only node set (faction_key = the Cult)."""
+    src_set = VANILLA_SETS[subtype]
+    new_set = 'druchii_cult_' + strip_prefix(src_set['key'])
+    add('character_skill_node_sets_tables', **dict(src_set, key=new_set, faction_key=FACTION))
+    items = [r['item'] for r in T('character_skill_node_set_items_tables') if r['set'] == src_set['key'] and not r['mod_disabled']]
+    nmap = {k: f'{new_set}__{strip_prefix(k)}' for k in items}
+    for r in T('character_skill_nodes_tables'):
+        if r['key'] in nmap:
+            add('character_skill_nodes_tables', **dict(r, key=nmap[r['key']]))
+    for k in items:
+        add('character_skill_node_set_items_tables', set=new_set, item=nmap[k], mod_disabled=False)
+    for r in T('character_skill_node_links_tables'):
+        if r['parent_key'] in nmap and r['child_key'] in nmap:
+            add('character_skill_node_links_tables', **dict(r, parent_key=nmap[r['parent_key']], child_key=nmap[r['child_key']]))
+    for r in T('character_skill_nodes_skill_locks_tables'):
+        if r['character_skill_node'] in nmap:
+            add('character_skill_nodes_skill_locks_tables', **dict(r, character_skill_node=nmap[r['character_skill_node']]))
+    for r in T('character_skill_node_ancillary_locks_tables'):
+        if r['character_skill_node'] in nmap:
+            add('character_skill_node_ancillary_locks_tables', **dict(r, character_skill_node=nmap[r['character_skill_node']]))
+    return new_set
+
+
+LORD_SETS = []   # the Cult's lord trees (red line swapped below)
+for subtype, lord in [('wh2_main_def_sorceress_dark', False), ('wh2_main_def_sorceress_fire', False),
+                      ('wh2_main_def_sorceress_shadow', False), ('wh2_dlc10_def_sorceress_death', False),
+                      ('wh2_dlc10_def_sorceress_beasts', False), ('wh2_dlc10_def_supreme_sorceress_dark', True),
+                      ('wh2_dlc10_def_supreme_sorceress_fire', True), ('wh2_dlc10_def_supreme_sorceress_shadow', True),
+                      ('wh2_dlc10_def_supreme_sorceress_death', True), ('wh2_dlc10_def_supreme_sorceress_beasts', True)]:
+    new_set = cult_tree_copy(subtype)
+    rework_sorceress_tree(new_set, lord)
+    if lord:
+        LORD_SETS.append(new_set)
+# High Beastmaster: Cult tree only for the red line (user 2026-11-26).
+LORD_SETS.append(cult_tree_copy('wh2_dlc14_def_high_beastmaster'))
+
+# The Slaanesh copies (already Cult-only).
+def our_set(subtype):
+    sets = [r['key'] for r in out_tables['character_skill_node_sets_tables'] if r['agent_subtype_key'] == subtype]
+    assert len(sets) == 1, (subtype, sets)
+    return sets[0]
+
+
+rework_sorceress_tree(our_set(SORC), False)
+rework_sorceress_tree(our_set(SUPREME), True)
+LORD_SETS.append(our_set(SUPREME))
+
+# Red line (user 2026-11-26): the Cult's own Line Breaker, Sheafmaster and Lash Master
+# (cult_army_skills.py, shared with the Morathi pack) in every Cult lord tree.
+from cult_army_skills import add_cult_army_skills
+ARMY_SKILLS = add_cult_army_skills(add, loc, db, table, loc_vanilla)
+for set_key in LORD_SETS:
+    n = 0
+    for node in set_nodes(set_key):
+        if node['character_skill_key'] in ARMY_SKILLS:
+            node['character_skill_key'] = ARMY_SKILLS[node['character_skill_key']]
+            n += 1
+    assert n == 10, (set_key, n)
+# Supreme Sorceresses only: Strength Through Spite -> Soporific Musk (user 2026-11-26; the High Beastmaster keeps it).
+from cult_army_skills import add_soporific_musk_skill
+MUSK = add_soporific_musk_skill(add, loc, db, table)
+for set_key in LORD_SETS:
+    if 'high_beastmaster' in set_key:
+        continue
+    hits = [node for node in set_nodes(set_key) if node['character_skill_key'] in MUSK]
+    assert len(hits) == 1, (set_key, len(hits))
+    hits[0]['character_skill_key'] = MUSK[hits[0]['character_skill_key']]
+# Supreme Sorceresses only: Kindle the Fury -> Veil of Excess (barrier +600; user 2026-11-26).
+from cult_army_skills import add_veil_skill
+VEIL = add_veil_skill(add, loc, db, table)
+for set_key in LORD_SETS:
+    if 'high_beastmaster' in set_key:
+        continue
+    hits = [node for node in set_nodes(set_key) if node['character_skill_key'] in VEIL]
+    assert len(hits) == 1, (set_key, len(hits))
+    hits[0]['character_skill_key'] = VEIL[hits[0]['character_skill_key']]
+
+# Cultist of Slaanesh.
+CULTIST_SET = our_set(CULTIST)
+cultist_nodes = set_nodes(CULTIST_SET)
+
+
+def cultist_node(skill):
+    hits = [n for n in cultist_nodes if n['character_skill_key'] == skill]
+    assert len(hits) == 1, skill
+    return hits[0]
+
+
+MISTRESS = 'druchii_cult_skill_sla_cultist_mistress_of_debauchery'
+new_skill('wh3_dlc27_skill_sla_cultist_personal_1', MISTRESS, name='Mistress of Debauchery',
+          description='Where the Cultist goes, revelry follows, and the people flock to the province to share in it.',
+          drop={'wh3_main_effect_force_all_summon_disciple_army_budget'},
+          extra=[(1, 'wh_main_effect_province_growth_characters', 'character_to_province_own', 10.0)])
+cultist_node('wh3_dlc27_skill_sla_cultist_personal_1')['character_skill_key'] = MISTRESS
+
+SLAVE_STOCK = 'druchii_cult_skill_sla_cultist_maintain_slave_stock'
+new_skill('wh3_main_skill_sla_hero_hinder_settlement_establish_cult', SLAVE_STOCK, name='Maintain Slave Stock',
+          description='The Cultist keeps the pens of the Cult full, so there are always bodies for its rites and revels.',
+          drop={'wh3_main_effect_agent_action_hinder_settlement_establish_cult_cost_mod'}, image='campaign_slaves.png',
+          extra=[(lvl, 'wh3_main_effect_agent_action_passive_def_slaves_effect', 'character_to_faction_when_on_map_unseen', v)
+                 for lvl, v in ((1, 6.0), (2, 12.0), (3, 18.0))])
+cultist_node('wh3_main_skill_sla_hero_hinder_settlement_establish_cult')['character_skill_key'] = SLAVE_STOCK
+# The slaves effect's scope (..._unseen) is hidden in tooltips, so the skill showed no effects (author,
+# 2026-11-26). CA's slave-income skill pairs it with a visible text effect; this is the same idea: a
+# display-only effect (no bonus value) with the same numbers, on the character.
+SLAVE_STOCK_LINE = 'druchii_cult_effect_cultist_slave_stock_display'
+add('effects_tables', effect=SLAVE_STOCK_LINE, icon='slaves.png', priority=1, icon_negative='slaves.png',
+    category='campaign', is_positive_value_good=True)
+loc[f'effects_description_{SLAVE_STOCK_LINE}'] = 'Slaves: %+n per turn for the faction'
+for lvl, v in ((1, 6.0), (2, 12.0), (3, 18.0)):
+    add('character_skill_level_to_effects_junctions_tables', character_skill_key=SLAVE_STOCK, effect_key=SLAVE_STOCK_LINE,
+        effect_scope='character_to_character_own', level=lvl, value=v)
+
+CULTIST_ACTIONS = 'druchii_cult_skill_all_dummy_agent_actions_sla_cultist'
+new_skill('wh3_main_skill_all_dummy_agent_actions_sla_cultist', CULTIST_ACTIONS,
+          drop={'wh3_main_effect_agent_action_enable_dignitary_hinder_settlement_establish_cult'})
+cultist_node('wh3_main_skill_all_dummy_agent_actions_sla_cultist')['character_skill_key'] = CULTIST_ACTIONS
+
+dechala = [n['key'] for n in cultist_nodes if n['faction_key']]
+assert len(dechala) == 1, dechala
+remove_nodes(CULTIST_SET, set(dechala))
+
 # The Cult of Pleasure pack's own unit sets (Mark of Slaanesh for heroes, rite upkeep, ...): each new
 # unit joins the same sets as the vanilla unit it was copied from. Read from the installed Cult pack,
 # so build Druchii_Cult-of-Pleasure_MOD first.
