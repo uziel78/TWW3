@@ -290,7 +290,7 @@ def add_soporific_musk_skill(add, loc, db, table):
                 add(t, **dict(r, **{col: SOPORIFIC_MUSK_SKILL}))
     add('character_skill_level_to_effects_junctions_tables', character_skill_key=SOPORIFIC_MUSK_SKILL,
         effect_key='wh3_main_effect_ability_enable_soporific_musk', effect_scope='character_to_character_own', level=1, value=1.0)
-    loc[f'character_skills_localised_name_{SOPORIFIC_MUSK_SKILL}'] = 'Soporific Musk'
+    loc[f'character_skills_localised_name_{SOPORIFIC_MUSK_SKILL}'] = 'Dark Radiance'   # author, 2026-11-27 (was Soporific Musk)
     loc[f'character_skills_localised_description_{SOPORIFIC_MUSK_SKILL}'] = (
         'A cloying, sleep-heavy perfume clings to the Sorceress, dulling the blades and slowing the steps of all '
         'foes who come near.')

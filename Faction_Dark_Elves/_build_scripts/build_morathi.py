@@ -220,7 +220,7 @@ assert swapped == 10, swapped
 H_SRC = 'wh3_main_lord_passive_harvester_of_souls_upgraded'
 H_ABILITY = 'druchii_morathi_lord_passive_harvester'
 H_EFFECT = 'druchii_morathi_effect_ability_enable_harvester'
-H_NAME = 'Intoxicating Allure'
+H_NAME = 'Temptress Supreme'   # author, 2026-11-27 (was Intoxicating Allure)
 add('unit_abilities_tables', **dict(next(r for r in table(db, 'unit_abilities_tables') if r['key'] == H_SRC),
                                     key=H_ABILITY, superseded_abilities_set=''))
 taken_ids = {r['unique_id'] for r in table(db, 'unit_special_abilities_tables')}
@@ -253,6 +253,18 @@ copy_skill('wh_main_skill_chs_lord_battle_stand_or_die', HARVESTER,
            description=H_QUOTE + ' As the foe dies around her, Morathi '
                        'drinks in their suffering and lends its strength to her own warriors.')
 set_node('wh2_main_skill_node_def_morathi_army_4', HARVESTER)
+
+# 10. She starts with Hekarti's Blessing and The First Sorceress (user 2026-11-27): one point on creation
+#     on both nodes (The First Sorceress needs Hekarti's Blessing first), and Hekarti's Blessing (her own
+#     version, only her node uses it) unlocks at rank 1 instead of 5. Morathi comes from the campaign's
+#     start position, which may not apply points-on-creation, so the Cult of Pleasure script also grants
+#     any of the two she lacks at the start of turn 2 (cm:add_skill, ignoring requirements and points).
+for node_key in ('wh2_main_skill_node_def_morathi_generic_1', 'wh2_main_skill_node_def_morathi_generic_7'):
+    add('character_skill_nodes_tables', **dict(nodes[node_key], points_on_creation=1))
+for r in table(db, 'character_skill_level_details_tables'):
+    if r['skill_key'] == 'wh2_main_skill_def_generic_hekartis_blessing_morathi':
+        add('character_skill_level_details_tables', **dict(r, unlocked_at_rank=1))
+add('character_skills_tables', **dict(skills['wh2_main_skill_def_generic_hekartis_blessing_morathi'], unlocked_at_rank=0))
 
 for table_name, rows in out_tables.items():
     path = os.path.join(root, 'db', table_name, FRAG)

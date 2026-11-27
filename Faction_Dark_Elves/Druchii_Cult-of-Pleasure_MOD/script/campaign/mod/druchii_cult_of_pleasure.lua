@@ -2339,9 +2339,98 @@ local function update_all_will_sight()
 	end
 end
 
+-- Morathi's starting skills (2026-11-27, author; Druchii_Morathi_MOD gives both nodes a point on
+-- creation): if the start position didn't apply them, grant Hekarti's Blessing and The First Sorceress
+-- once, at the Cult's turn 2 start (no character work on turn 1), ignoring requirements and points.
+local MORATHI_START_SKILLS = { "wh2_main_skill_def_generic_hekartis_blessing_morathi", "wh2_main_skill_def_morathi_first_sorceress" }
+core:add_listener("druchii_cult_morathi_start_skills", "FactionTurnStart",
+	function(context)
+		return cm:model():turn_number() >= 2 and context:faction():name() == FACTION_KEY
+			and not cm:get_saved_value("druchii_cult_morathi_start_skills_v1")
+	end,
+	function(context)
+		cm:set_saved_value("druchii_cult_morathi_start_skills_v1", true)
+		local ok, err = pcall(function()
+			local morathi = find_morathi(context:faction())
+			if not morathi then
+				return
+			end
+			for _, skill in ipairs(MORATHI_START_SKILLS) do
+				if morathi:has_skill(skill) then
+					log("Morathi already has " .. skill)
+				else
+					cm:add_skill(morathi, skill, true, true)
+					log("Morathi given " .. skill)
+				end
+			end
+		end)
+		if not ok then
+			log("ERROR giving Morathi her starting skills: " .. tostring(err))
+		end
+	end, true)
+
 core:add_listener("druchii_cult_will_sight_turn", "FactionTurnStart",
 	function(context) return cm:model():turn_number() >= 2 and context:faction():name() == FACTION_KEY end,
 	function() pcall(update_all_will_sight) end, true)
+
+---------------------------------------------------------------------------
+-- 19. Offer to the Dark Prince: the Cult's Raze (2026-11-27, author)
+---------------------------------------------------------------------------
+-- The Cult's own raze option (builder section 32, captives enslaved, no gold) is recognised by its
+-- option id. When the Cult picks it: +30 slaves per settlement level (+45 for a major settlement /
+-- province capital) and +10 +5 per level Slaanesh corruption in the province. The level is read at the
+-- decision, from the settlement's main building (1 if it can't be read; logged). Turn 1 is skipped
+-- (no character-event work on turn 1); the option itself still works then.
+local OFFER_OPTION_ID = "1918302745"
+local OFFER_SLAVES_MINOR, OFFER_SLAVES_MAJOR = 30, 45
+local OFFER_CORRUPTION_BASE, OFFER_CORRUPTION_PER_LEVEL = 10, 5
+local OFFER_INCIDENT = "druchii_cult_incident_offer_to_the_dark_prince"   -- builder section 32
+
+core:add_listener("druchii_cult_offer_to_the_dark_prince", "CharacterPerformsSettlementOccupationDecision",
+	function(context)
+		if cm:model():turn_number() < 2 then
+			return false
+		end
+		local ok, decision = pcall(function() return context:occupation_decision() end)
+		return ok and tostring(decision) == OFFER_OPTION_ID
+	end,
+	function(context)
+		local ok, err = pcall(function()
+			local region = context:garrison_residence():region()
+			local level = 1
+			local read_ok, building_level = pcall(function()
+				return region:settlement():primary_slot():building():building_level()
+			end)
+			if read_ok and type(building_level) == "number" and building_level > 0 then
+				level = building_level
+			else
+				log("Offer to the Dark Prince: settlement level not readable, using 1")
+			end
+			local major = false
+			pcall(function() major = region:is_province_capital() end)
+			local slaves = level * (major and OFFER_SLAVES_MAJOR or OFFER_SLAVES_MINOR)
+			local corruption = OFFER_CORRUPTION_BASE + OFFER_CORRUPTION_PER_LEVEL * level
+			-- The slaves come as the payload of a message (incident), so the player sees the exact number;
+			-- if the incident can't be sent, they're added directly.
+			local sent = pcall(function()
+				local incident_builder = cm:create_incident_builder(OFFER_INCIDENT)
+				local payload_builder = cm:create_payload()
+				payload_builder:faction_pooled_resource_transaction("def_slaves", "raiding", slaves, false)
+				incident_builder:set_payload(payload_builder)
+				cm:launch_custom_incident_from_builder(incident_builder, cm:get_faction(FACTION_KEY))
+			end)
+			if not sent then
+				log("Offer to the Dark Prince: message not sent, slaves added directly")
+				cm:faction_add_pooled_resource(FACTION_KEY, "def_slaves", "raiding", slaves)
+			end
+			cm:change_corruption_in_province_by(region:province_name(), "wh3_main_corruption_slaanesh", corruption, "events")
+			log("Offer to the Dark Prince at " .. region:name() .. " (level " .. level .. (major and ", major" or ", minor")
+				.. "): +" .. slaves .. " slaves, +" .. corruption .. " Slaanesh corruption in " .. region:province_name())
+		end)
+		if not ok then
+			log("ERROR in Offer to the Dark Prince: " .. tostring(err))
+		end
+	end, true)
 
 core:add_listener("druchii_cult_will_sight_moved", "CharacterFinishedMoving",
 	function(context)
@@ -2371,6 +2460,9 @@ cm:add_first_tick_callback(function()
 		-- No Kharibdyss either (2026-11-26, author; also out of the Cult's Beastmasters chain).
 		cm:add_event_restricted_unit_record_for_faction("wh2_dlc10_def_mon_kharibdyss_0", FACTION_KEY,
 			"druchii_cult_no_kharibdyss")
+		-- No Feral Manticore either (2026-11-27, author).
+		cm:add_event_restricted_unit_record_for_faction("wh2_dlc10_def_mon_feral_manticore_0", FACTION_KEY,
+			"druchii_cult_no_feral_manticore")
 	end)
 	run_step("mark_of_slaanesh", function()
 		-- The Mark's attributes/stats, applied to the faction (kept out of the faction bundle so the

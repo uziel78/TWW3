@@ -268,3 +268,19 @@ User mods Total War: Warhammer III with RPFM.
   reads in pcall); the sorcery and line-of-sight steps run from turn 2; a turn-1 battle still gets
   Morathi's bonus from the PendingBattle check. Tip: compare minidump exception offsets to match a
   crash with a known cause.
+- 2026-11-27 (Cult v30-v33, Morathi v13-v14, characters v17-v18):
+  - Supreme Sorceresses' musk skill renamed Dark Radiance; Morathi's aura renamed Temptress Supreme.
+  - Morathi starts with Hekarti's Blessing and The First Sorceress: one point on creation on both nodes,
+    Hekarti's Blessing (her version) unlocks at rank 1; the Cult script grants any she lacks at the turn-2
+    start (`cm:add_skill(character, key, true, true)`, CA's call).
+  - Mark of Slaanesh list: Sorceresses only Dark Magic (+ the Slaanesh copy through the characters pack);
+    lords added: Supreme Sorceress Dark Magic (+ Slaanesh copy) and the High Beastmaster.
+  - Feral Manticore out of the Cult roster, like the Kharibdyss.
+  - Offer to the Dark Prince (builder section 32, Lua section 19): the Cult's Raze. v31 gave the Cult its
+    own option with a higher member priority (Rakarth's method); it did NOT replace the Dark Elf Raze. CA's
+    working method (Aislinn) is to keep the faction out of the default group, so v32 points the Dark Elf
+    Raze row (id 1032) at a group listing every Dark Elf faction except the Cult (31 base + 4 MIXER, read
+    from the Workshop MIXER pack). Confirmed: the Cult sees the offering. Captives enslaved, no gold; from
+    turn 2 the script adds +30 / +45 (province capital) slaves per settlement level through the payload of
+    the incident "The Dark Prince Is Pleased" (event messages take fixed texts only) and +10 +5 per level
+    Slaanesh corruption (`cm:change_corruption_in_province_by`, factor "events").

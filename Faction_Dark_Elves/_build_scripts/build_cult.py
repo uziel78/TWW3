@@ -213,9 +213,21 @@ for r in table(db, 'units_to_groupings_military_permissions_tables'):
 # Anointed (a Slaanesh hero) already has the Mark.
 for u, m in sorted(main_units.items()):
     # Death Hags left out again (user, 2026-11-25: the Cult recruits Cultists of Slaanesh instead).
+    # Sorceresses: Lore of Dark Magic only (user 2026-11-27; the Slaanesh copies join through the
+    # characters pack, which gives each copy the sets of its Dark Magic original).
+    if '_def_cha_sorceress_' in u and '_def_cha_sorceress_dark_' not in u:
+        continue
     if m['caste'] == 'hero' and '_def_cha_' in u and '_death_hag' not in u and u not in NO_MARK and not m['is_renown']:
         attrs = groups.get(land_units[m['land_unit']]['attribute_group'], set())
         if 'mark_slaanesh' not in attrs and 'daemonic' not in attrs:
+            mark_units.append((u, attrs))
+# Lords with the Mark (user 2026-11-27): Supreme Sorceress (Lore of Dark Magic; the Slaanesh copy joins
+# as above) and the High Beastmaster, every mount variant. Morathi and the other lores don't get it.
+for u, m in sorted(main_units.items()):
+    if m['caste'] == 'lord' and (u.startswith('wh2_dlc10_def_cha_supreme_sorceress_dark_')
+                                 or u.startswith('wh2_dlc14_def_cha_high_beastmaster_')):
+        attrs = groups.get(land_units[m['land_unit']]['attribute_group'], set())
+        if 'mark_slaanesh' not in attrs:
             mark_units.append((u, attrs))
 mark_units.sort()
 
@@ -395,6 +407,10 @@ add('factionwide_recruitment_unit_exclusions_units_sets_junctions_tables', set=E
 # locked by the campaign script like the Executioners).
 add('factionwide_recruitment_unit_exclusions_units_sets_junctions_tables', set=EXCLUSION_SET,
     unit='wh2_dlc10_def_mon_kharibdyss_0')
+add('factionwide_recruitment_unit_exclusions_units_sets_junctions_tables', set=EXCLUSION_SET,
+    unit='wh2_dlc10_def_mon_feral_manticore_0')   # Feral Manticore (user 2026-11-27), script-locked too
+loc['campaign_localised_strings_string_druchii_cult_no_feral_manticore'] = (
+    '[[col:red]]The Cult of Pleasure does not keep Feral Manticores.[[/col]]')
 loc['campaign_localised_strings_string_druchii_cult_no_kharibdyss'] = (
     '[[col:red]]The Cult of Pleasure does not keep Kharibdysses.[[/col]]')
 add('faction_factionwide_recruitment_unit_exclusions_set_junctions_tables', faction=FACTION, set=EXCLUSION_SET)
@@ -1229,7 +1245,9 @@ cult_chain_copy('wh2_main_def_defence_major', 'druchii_cult_defence_major',
 cult_chain_copy('wh2_main_def_beasts', 'druchii_cult_beasts',
                 # Kharibdyss dropped (user 2026-11-26: not in the Cult's roster; also excluded, section 8).
                 unit_swap={'wh2_main_def_inf_harpies': FURIES, 'wh2_main_def_mon_black_dragon': PREYTON,
-                           'wh2_dlc10_def_mon_kharibdyss_0': None},
+                           'wh2_dlc10_def_mon_kharibdyss_0': None,
+                           # Feral Manticore dropped too (user 2026-11-27: not a Cult unit; also excluded, section 8).
+                           'wh2_dlc10_def_mon_feral_manticore_0': None},
                 names={'druchii_cult_beasts_1': "Furies' Roost", 'druchii_cult_beasts_3': "Preyton's Pen"},
                 short_texts={
                     'druchii_cult_beasts_1': "Daemonic Furies of the Dark Prince gather to roost above the Cult's temples.",
@@ -1467,6 +1485,68 @@ loc[f'effect_bundles_localised_description_{WILL_SIGHT_BUNDLE}'] = (
 add('effect_bundles_to_effects_junctions_tables', effect_bundle_key=WILL_SIGHT_BUNDLE,
     effect_key='wh_main_effect_agent_field_line_of_sight_mod', effect_scope='character_to_character_own', value=0.0,
     advancement_stage='start_turn_completed')
+
+# --------------------------------------------------------------------------
+# 32. Offer to the Dark Prince: the Cult's Raze (user 2026-11-27)
+# --------------------------------------------------------------------------
+# Capture options belong to campaign groups; a group with a higher member priority replaces another
+# group's option of the same type (CA's Rakarth Raze rows, priority 1 over the Dark Elf 0). So a Cult-only
+# group (faction = the Cult as ACTOR) gives the Cult its own "raze_without_occupy": captives enslaved
+# (Dark Elf post-battle slaves, 1 per 2 captured men) instead of killed, no gold. The script (Lua section
+# 19) adds 30 slaves per settlement level (45 for a major settlement) and +10 +5 per level Slaanesh
+# corruption in the province, recognising the option by its id (OFFER_OPTION_ID, also in the Lua).
+OFFER_GROUP = 'druchii_cult_occupation_decision_offer_to_the_dark_prince'
+OFFER_OPTION_ID = 1918302745
+occupation_rows = table(db, 'culture_settlement_occupation_options_tables')
+assert OFFER_OPTION_ID not in {r['id'] for r in occupation_rows}
+de_raze = next(r for r in occupation_rows if r['group'] == 'wh2_main_sc_def_dark_elves_occupation_decision_raze_without_occupy')
+add('campaign_groups_tables', id=OFFER_GROUP)
+add('campaign_group_members_tables', group=OFFER_GROUP, id=OFFER_GROUP, priority=1.0)
+add('campaign_group_member_criteria_factions_tables', faction=FACTION, member=OFFER_GROUP, context='ACTOR')
+add('culture_settlement_occupation_options_tables', **dict(
+    de_raze, group=OFFER_GROUP, id=OFFER_OPTION_ID, captive_option_outcome='enslave', base_loot=0.0, building_loot_mod=0.0,
+    tooltip='Offer to the Dark Prince||The settlement is burned in a final revel of excess.'))
+# v31 test (2026-11-27): priority alone did NOT replace the Dark Elf Raze (the screen still showed it).
+# CA's working faction-specific options (Aislinn) instead keep that faction OUT of the default group: the
+# High Elf group lists every High Elf faction one by one, except Aislinn. Same here: the Dark Elf Raze row
+# (id 1032) is pointed at a new group whose members are every Dark Elf faction except the Cult, one member
+# per faction (base game + MIXER's Dark Elf factions, read from the installed MIXER pack). Their Raze is
+# unchanged; a Dark Elf faction added by another mod would lose Raze (not crash).
+DE_RAZE_GROUP = 'druchii_cult_occupation_decision_raze_dark_elves_except_cult'
+de_factions = [r['key'] for r in table(db, 'factions_tables') if r['subculture'] == 'wh2_main_sc_def_dark_elves']
+import glob   # MIXER is a Workshop pack: steamapps/workshop/content/1142710/<id>/ next to steamapps/common
+mixer_paths = [os.path.join(DATA, '!b_mixer.pack')] + glob.glob(os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(DATA))), 'workshop', 'content', '1142710', '*', '!b_mixer.pack'))
+mixer_paths = [m for m in mixer_paths if os.path.exists(m)]
+if mixer_paths:
+    de_factions += [r['key'] for r in table(Pack(mixer_paths[0]), 'factions_tables') if r['subculture'] == 'wh2_main_sc_def_dark_elves']
+else:
+    print('WARNING: MIXER pack not found; its Dark Elf factions get no Raze')
+de_factions = sorted(set(de_factions) - {FACTION})
+add('campaign_groups_tables', id=DE_RAZE_GROUP)
+for f in de_factions:
+    member = f'{DE_RAZE_GROUP}_{f}'
+    add('campaign_group_members_tables', group=DE_RAZE_GROUP, id=member, priority=0.0)
+    add('campaign_group_member_criteria_factions_tables', faction=f, member=member, context='ACTOR')
+add('culture_settlement_occupation_options_tables', **dict(de_raze, group=DE_RAZE_GROUP))
+print('Offer to the Dark Prince: Dark Elf Raze regrouped for', len(de_factions), 'factions (all but the Cult)')
+# Tooltip A (author 2026-11-27): the extras (script) don't show in the capture preview, so the text names
+# them without numbers; the post-offering incident below shows the exact slaves.
+loc[f'culture_settlement_occupation_options_tooltip_{OFFER_OPTION_ID}'] = (
+    "Offer to the Dark Prince||The settlement is burned in a final revel of excess. Its people are dragged off in "
+    "chains or given to Slaanesh, and the Dark Prince's taint lingers over the land.\n\nThe Dark Prince rewards the "
+    "offering with more slaves the greater the settlement, and his corruption surges through the province. The "
+    "previous owners will like you a lot less.")
+# Post-offering message: an incident whose payload grants the extra slaves (so the event shows the exact
+# number; event messages take fixed texts only), sent by the script (Lua section 19) from turn 2.
+OFFER_INCIDENT = 'druchii_cult_incident_offer_to_the_dark_prince'
+add('incidents_tables', **dict(incident_template, key=OFFER_INCIDENT))
+loc[f'incidents_localised_title_{OFFER_INCIDENT}'] = 'The Dark Prince Is Pleased'
+loc[f'incidents_localised_description_{OFFER_INCIDENT}'] = (
+    "The offering pleases Slaanesh. The settlement's people fill the Cult's slave pens, and the Dark Prince's taint "
+    "deepens across the province.")
+loc[f'incidents_button_text_{OFFER_INCIDENT}'] = loc_vanilla.get(
+    'incidents_button_text_wh2_main_incident_intercontinental_diplomacy', 'Continue')
 
 # --------------------------------------------------------------------------
 # Write
